@@ -188,7 +188,7 @@ class PushMFC{
                 this.options.models[k].forEach(function(item){
                     this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + k);
                     model._push.events[item] = true;
-                });
+                }.bind(this));
             }
         }
     }
