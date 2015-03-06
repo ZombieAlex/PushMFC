@@ -28,3 +28,23 @@ pmi.start();
 ```
 
 ------------
+
+##Options
+As defined in TypeScript...
+
+```typescript
+enum Events {
+    All,        //Log every possible event
+    OnOff,      //Track only whether the model is generally on MFC or not (leaving off public/private/group details)
+    VideoStates,//Track all offline, online, private, public, group, etc states for the model
+    Rank,       //Changes in the model's rank
+    Topic,      //Changes in the model's topic
+}
+
+interface Options{
+    targetDevice?: string; //Which Pushbullet device to target, unspecified == all devices
+    models: {
+        [index: number]: Events[]; //Which events to monitor for which models
+    };
+};
+```
