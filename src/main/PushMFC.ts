@@ -186,6 +186,7 @@ class PushMFC{
                 model.on("topic", this.modelTopicPusher.bind(this));
                 model._push = {events: {}, changes: [], pushFunc: _.debounce(this.pushStack.bind(this,model), 5000)};
                 this.options.models[k].forEach(function(item){
+                    this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + k);
                     model._push.events[item] = true;
                 });
             }
