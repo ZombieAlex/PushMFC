@@ -1,6 +1,6 @@
 {
   "name": "PushMFC",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Pushbullet notifications for MyFreeCams",
   "main": "index.js",
   "scripts": {
@@ -21,6 +21,7 @@
   "devDependencies": {
     "gulp": "^3.8.11",
     "gulp-concat": "^2.5.2",
+    "gulp-strip-comments": "^1.0.1",
     "gulp-typescript": "^2.4.2",
     "gulp-util": "^3.0.4",
     "merge2": "^0.3.1"

@@ -1,5 +1,5 @@
-/// <reference path="../dependent_definitions/node.d.ts" />
-/// <reference path="../../node_modules/MFCAuto/lib/MFCAuto.d.ts" />
+
+
 declare enum Events {
     All = 0,
     OnOff = 1,
