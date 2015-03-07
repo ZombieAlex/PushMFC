@@ -135,13 +135,7 @@ class PushMFC{
                     if(model._push.previousVideoState !== undefined && model._push.previousVideoState.when !== change.when){
                         line += " after " + moment.duration(change.when - model._push.previousVideoState.when).humanize() + " in state " + this.mfc.STATE[<number>model._push.previousVideoState.after];
                     }
-                    model._push.previousVideoState = change; //@BUGBUG - This is wrong @TODO, we're looping from most recent to least recent and building the string that way, but this assumes we're dong the opposite, this is causing times to be misrepresented
-                    //@TODO - One fix would be to just build the string backwards prepending instead of appending
-                    //@TODO - Or should each SingleChange have a duration since the given property had last changed??  Or???
-                    //@TODO - Or, we only have 3 properties to track, maybe they each get separate stacks, which would simplify peeking ahead
-                    //to see the previous/next state.
-                    //@TODO - @BUGBUG - Completely drop the MFCAuto_Script repository.  It doesn't need to be there, but
-                    //as you do it you need to edit the readme for MFCAuto
+                    model._push.previousVideoState = change;
                     line += ".\n";
                     break;
                 case "vs2": //Property doesn't really exist on Model, we're overloading the mechanism here to capture Online/Offline....
