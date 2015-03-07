@@ -149,12 +149,10 @@ class PushMFC{
                     body += ".\n";
                     break;
                 case "rank":
-                    if(change.before !== undefined || change.after !== 0){
-                        title = "PM: " + model.nm;
-                        var brank = change.before === 0 ? " from rank over 250" : (change.before === undefined ? "" : " from rank " + change.before);
-                        var arank = change.after === 0 ? "over 250" : String(change.after);
-                        body += "Has moved" + brank + " to rank " + arank + ".\n";
-                    }
+                    title = "PM: " + model.nm;
+                    var brank = change.before === 0 ? " from rank over 250" : (change.before === undefined ? "" : " from rank " + change.before);
+                    var arank = change.after === 0 ? "over 250" : String(change.after);
+                    body += "Has moved" + brank + " to rank " + arank + ".\n";
                     break;
                 case "topic":
                     body += "Has changed her topic:\n\t" + change.after + "\n";
@@ -226,7 +224,7 @@ class PushMFC{
     }
 
     private modelRankPusher(model: TaggedModel, before: number, after: number) {
-        if((model._push.events[Events.Rank] === true || model._push.events[Events.All] === true) && before !== after){
+        if((model._push.events[Events.Rank] === true || model._push.events[Events.All] === true) && before !== after && (before !== undefined || after !== 0)){
             model._push.changes.push({prop: "rank", before: before, after: after, when: moment()});
             model._push.pushFunc();
         }
