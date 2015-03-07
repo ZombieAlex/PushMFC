@@ -131,7 +131,7 @@ class PushMFC{
                 this.assert.notStrictEqual("All Devices", response.devices[i].nickname, "You have a Pushbullet device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue")
             }
             this.processOptions();
-            this.push("PM: Startup", "PushMFC has started");
+            this.push(undefined, "PM: Startup", "PushMFC has started");
             this.client.connect(true,callback);
         }.bind(this));
     }
