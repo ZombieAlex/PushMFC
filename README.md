@@ -24,6 +24,8 @@ var options = {
         6158368: [pm.Events.OnOff], //GinnyPotter
     },
     //Add as many device names as you want here
+    //Last device wins if an event for a model is listed
+    //under multiple devices
 };
 
 var pmi = new pm.PushMFC('<Your Pushbullet API Key here>', options);
@@ -42,6 +44,8 @@ enum Events {
     VideoStates,//Track all offline, online, private, public, group, etc states for the model
     Rank,       //Changes in the model's rank
     Topic,      //Changes in the model's topic
+    CountdownStart,     //Notify when we detect a countdown has started
+    CountdownComplete,  //Notify when we detect a countdown has complete
 }
 
 interface Options{

@@ -16,8 +16,9 @@ interface Options {
 }
 interface SingleChange {
     prop: string;
-    before: number | string;
-    after: number | string;
+    before?: number | string;
+    after?: number | string;
+    message?: string;
     when: any;
 }
 interface TaggedModel extends ExpandedModel {
@@ -29,6 +30,12 @@ interface TaggedModel extends ExpandedModel {
         changes: SingleChange[];
         previousVideoState?: SingleChange;
         previousOnOffState?: SingleChange;
+        countdown: {
+            exists: boolean;
+            numbers: number[];
+            index: number;
+            decrementMap: number[];
+        };
     };
 }
 declare var _: any;
@@ -55,4 +62,6 @@ declare class PushMFC {
     private modelStatePusher(model, before, after);
     private modelRankPusher(model, before, after);
     private modelTopicPusher(model, before, after);
+    private countdownPusher(model, before, after);
+    private resetCountdown(model, newNumbers);
 }

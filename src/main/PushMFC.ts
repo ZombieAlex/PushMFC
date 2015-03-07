@@ -37,8 +37,8 @@ enum Events {
     VideoStates, //Track all offline, online, private, public, group, etc states for the model
     Rank, //Changes in the model's rank
     Topic, //Changes in the model's topic
-    CountdownStart, //@TODO - Unimplemented yet
-    CountdownComplete, //@TODO - Unimplemented yet
+    CountdownStart, //Notify when we detect a countdown has started
+    CountdownComplete, //Notify when we detect a countdown has complete
 }
 
 interface Options{
@@ -49,20 +49,53 @@ interface Options{
 
 interface SingleChange{
     prop: string;
-    before: number|string;
-    after: number|string;
+    //Single change should either have a before and after, or a message
+    before?: number|string;
+    after?: number|string;
+    message?: string;
     when: any; //Time of the change, a date or moment...
 }
 
 interface TaggedModel extends ExpandedModel{
     _push: {
+        //A bound a debounced function that will send the Pushbullet
+        //note notification for all current changes for this model
         pushFunc: ()=>void;
         events: {
-            [index: number]: string; //event -> targetDeviceIden (or "All Devices" for all)
+            //event -> targetDeviceIden (or "All Devices" for all)
+            //Controls which events are sent to which Pushbullet device
+            //There is one and only one device allowed, last one specified wins
+            [index: number]: string;
         }
+        //A stack of all the changes this model has had since the last push
         changes: SingleChange[];
+
+        //Helper references that allow us to get the time since the last
+        //video state change and on/off change when we finally push these
+        //states
         previousVideoState?: SingleChange;
         previousOnOffState?: SingleChange;
+
+        //Where we'll stash our countdown tracker code
+        countdown: {
+            //True when this model appears to have a countdown in progress
+            //otherwise false
+            exists: boolean;
+
+            //All the numbers in the models last topic parsed out, in order
+            //as numbers (not strings)
+            numbers: number[];
+
+            //Which of the numbers in this.numbers we currently believe is
+            //the countdown tracking value, or -1 if we don't know yet
+            index: number;
+
+            //How many times each of the numbers in this.numbers
+            //have been decremented.  We use this to attempt to identify
+            //both if the model has a countdown (if decrement count > limit)
+            //and which index we currently think is the current countdown value
+            decrementMap: number[];
+        }
     }
 }
 
@@ -182,6 +215,20 @@ class PushMFC{
                     //Build the string for this change
                     line += "Has changed her topic:\n\t" + change.after + "\n";
                     break;
+                case "cdstart":
+                    //Record the target device for this change
+                    this.assert.notStrictEqual(model._push.events[Events.CountdownStart], undefined);
+                    targetDevices[model._push.events[Events.CountdownStart]] = true;
+
+                    line += change.message + "\n";
+                    break;
+                case "cdend":
+                    //Record the target device for this change
+                    this.assert.notStrictEqual(model._push.events[Events.CountdownComplete], undefined);
+                    targetDevices[model._push.events[Events.CountdownComplete]] = true;
+
+                    line += change.message + "\n";
+                    break;
                 default:
                     this.assert(false, "Don't know how to push for property: " + change.prop);
             }
@@ -225,7 +272,17 @@ class PushMFC{
                     model.on("vs", this.modelStatePusher.bind(this)); //@TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
                     model.on("rank", this.modelRankPusher.bind(this))
                     model.on("topic", this.modelTopicPusher.bind(this));
-                    model._push = {events: {}, changes: [], pushFunc: _.debounce(this.pushStack.bind(this,model), 5000)};
+                    model._push = {
+                        events: {},
+                        changes: [],
+                        pushFunc: _.debounce(this.pushStack.bind(this,model), 5000),
+                        countdown: {
+                            index: -1,
+                            exists: false,
+                            numbers: [],
+                            decrementMap: []
+                        }
+                    };
                     this.options[device][modelId].forEach(function(deviceIden: string, item: Events){
                         this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + modelId);
                         if(item === Events.All){
@@ -247,7 +304,7 @@ class PushMFC{
     private modelStatePusher(model: TaggedModel, before: FCVIDEO, after: FCVIDEO) {
         if(before!==after){
             var change: SingleChange;
-            if(model._push.events[Events.OnOff] !== undefined ||  model._push.events[Events.All] !== undefined){
+            if(model._push.events[Events.OnOff] !== undefined){
                 if(before === this.mfc.FCVIDEO.OFFLINE && after !== this.mfc.FCVIDEO.OFFLINE){
                     change = {prop: "vs2", before: before, after: after, when: moment()};
                     if(model._push.previousOnOffState === undefined){
@@ -265,7 +322,7 @@ class PushMFC{
                     model._push.pushFunc();
                 }
             }
-            if(model._push.events[Events.VideoStates] !== undefined || model._push.events[Events.All] !== undefined){
+            if(model._push.events[Events.VideoStates] !== undefined){
                 change = {prop: "vs", before: before, after: after, when: moment()};
                 if(model._push.previousVideoState === undefined){
                     model._push.previousVideoState = change;
@@ -277,17 +334,123 @@ class PushMFC{
     }
 
     private modelRankPusher(model: TaggedModel, before: number, after: number) {
-        if((model._push.events[Events.Rank] !== undefined || model._push.events[Events.All] !== undefined) && before !== after && (before !== undefined || after !== 0)){
+        if(model._push.events[Events.Rank] !== undefined && before !== after && (before !== undefined || after !== 0)){
             model._push.changes.push({prop: "rank", before: before, after: after, when: moment()});
             model._push.pushFunc();
         }
     }
 
     private modelTopicPusher(model: TaggedModel, before: string, after: string) {
-        if((model._push.events[Events.Topic] !== undefined || model._push.events[Events.All] !== undefined) && before !== after && after !== undefined && after !== null && after !== ""){
+        if(model._push.events[Events.Topic] !== undefined && before !== after && after !== undefined && after !== null && after !== ""){
             model._push.changes.push({prop: "topic", before: before, after: after, when: moment()});
             model._push.pushFunc();
         }
+
+        if(after !== before && (model._push.events[Events.CountdownStart] !== undefined || model._push.events[Events.CountdownComplete] !== undefined)){
+            this.countdownPusher(model, before, after);
+        }
+    }
+
+    private countdownPusher(model: TaggedModel, before: string, after: string){
+        var numberRe = /([0-9]+)/g;
+
+        //If any single number in a model's topic decrements at least
+        //this many times, we'll assume that it's a countdown goal
+        var minimumDecrements = 2;
+
+        //MFC's auto-countdown frequently puts the string "[none]"
+        //in the topic for a completed auto-countdown
+        var cleanAfter = after.replace(/\[none\]/g,"0");
+
+        //Pull out any numbers in the new topic
+        var newNumbers = (cleanAfter.match(numberRe) || []).map(Number);
+        var oldNumbers = model._push.countdown.numbers;
+
+        //If we've already been tracking numbers in this model's topic
+        if(newNumbers.length === oldNumbers.length && newNumbers.length > 0){
+            //Compare the new numbers to the old
+            for(var i=0; i<newNumbers.length; i++){
+                //For any numbers that have decreased
+                if(oldNumbers[i] > newNumbers[i]){
+                    //Record that they've decreased once
+                    model._push.countdown.decrementMap[i]++;
+
+                    //If the number at this position has decreased enough
+                    if(model._push.countdown.decrementMap[i] >= minimumDecrements){
+                        if(model._push.countdown.exists){
+                            if(model._push.countdown.index !== i){
+                                //We had previously been tracking .index as our
+                                //countdown field.  But another index has passed
+                                //our decrement threshold first.  Our assumptions
+                                //were invalid.  Just reset and start over without
+                                //assuming any countdown has been set or reached.
+                                //@TODO - Should we send a message on countdown
+                                //abandonment?
+                                this.resetCountdown(model, newNumbers);
+                                return;
+                            }else{
+                                //We already think we have a countdown at this
+                                //index.  Is the new value 0?
+                                if(newNumbers[i] === 0){
+                                    if(model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined){
+                                        model._push.changes.push({
+                                            prop:"cdend",
+                                            message: "Countdown completed! Topic is now:\n\t" + after + "\nAnd was:\n\t" + before,
+                                            when: moment()
+                                        });
+                                        model._push.pushFunc();
+                                    }
+                                    this.resetCountdown(model, newNumbers);
+                                    return;
+                                }
+                            }
+                        }else{
+                            //Number "i" has decremented enough that we
+                            //think we're looking at a countdown now.
+                            model._push.countdown.exists = true;
+                            model._push.countdown.index = i;
+                            if(model._push.events[Events.CountdownStart] !== undefined){
+                                model._push.changes.push({
+                                    prop:"cdstart",
+                                    message: "Countdown detected, " + newNumbers[i] + " remaining:\n\t" + after,
+                                    when: moment()
+                                });
+                                model._push.pushFunc();
+                            }
+                        }
+                    }
+                }
+            }
+
+            //Set the current numbers for the next topic update to compare against
+            model._push.countdown.numbers = newNumbers;
+        }else{
+            //Topic has radically changed and doesn't have the same amount
+            //of distinct numbers as it used to.  That might be because a
+            //countdown has been reached and the model wrote a completely new
+            //topic.
+            if(model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined){
+                model._push.changes.push({
+                    prop:"cdend",
+                    message: "Countdown completed! Topic is now:\n\t" + after + "\nAnd was:\n\t" + before,
+                    when: moment()
+                });
+                model._push.pushFunc();
+            }
+
+            //Whether a topic was reached or not, our assumptions are still
+            //invalid and we need to reset the countdown state for this model
+            this.resetCountdown(model, newNumbers);
+        }
+    }
+
+    private resetCountdown(model: TaggedModel, newNumbers: number[]){
+        model._push.countdown = {
+            exists: false,
+            numbers: newNumbers,
+            index: -1,
+            decrementMap: newNumbers.map(function(){return 0;})
+        };
     }
 };
 
