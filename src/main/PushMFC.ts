@@ -4,6 +4,12 @@
 PushMFC.js - Pushbullet notifications for MyFreeCams
 
 @TODO List
+    * Pre-query all the given models to get around the long standing bug
+        where MFC doesn't send any information for models that are online
+        but "idle" and not in any other video state like away free chat etc
+        at the moment you log in.  They do send that detail for friends, but
+        nobody else.  I think this is queryable through an FCTYPE.DETAILS
+        message.
     * Support logging for all friends of a given account
     * Support specifying models my name:
         [index: string]: Events[]; //Models can be specified by name
@@ -119,47 +125,55 @@ class PushMFC{
 
         var title = "PM: " + model.nm;
         var body = "";
+        var line = "";
 
-        while((change = model._push.changes.pop()) !== undefined){
-            body += "[" + change.when.format("HH:mm:ss") + "] ";
+        while((change = model._push.changes.shift()) !== undefined){
+            line = "";
             switch(change.prop){
                 case "vs":
-                    body += "Is now in state " + this.mfc.STATE[<number>change.after];
+                    line += "Is now in state " + this.mfc.STATE[<number>change.after];
                     if(model._push.previousVideoState !== undefined && model._push.previousVideoState.when !== change.when){
-                        body += " after " + moment.duration(change.when - model._push.previousVideoState.when).humanize() + " in state " + this.mfc.STATE[<number>model._push.previousVideoState.after];
+                        line += " after " + moment.duration(change.when - model._push.previousVideoState.when).humanize() + " in state " + this.mfc.STATE[<number>model._push.previousVideoState.after];
                     }
-                    model._push.previousVideoState = change;
-                    body += ".\n";
+                    model._push.previousVideoState = change; //@BUGBUG - This is wrong @TODO, we're looping from most recent to least recent and building the string that way, but this assumes we're dong the opposite, this is causing times to be misrepresented
+                    //@TODO - One fix would be to just build the string backwards prepending instead of appending
+                    //@TODO - Or should each SingleChange have a duration since the given property had last changed??  Or???
+                    //@TODO - Or, we only have 3 properties to track, maybe they each get separate stacks, which would simplify peeking ahead
+                    //to see the previous/next state.
+                    //@TODO - @BUGBUG - Completely drop the MFCAuto_Script repository.  It doesn't need to be there, but
+                    //as you do it you need to edit the readme for MFCAuto
+                    line += ".\n";
                     break;
                 case "vs2": //Property doesn't really exist on Model, we're overloading the mechanism here to capture Online/Offline....
                     if(change.after === this.mfc.STATE.Offline){
-                        body += "Is now off MFC";
+                        line += "Is now off MFC";
                     }else{
-                        body += "Is now on MFC";
+                        line += "Is now on MFC";
                     }
                     if(model._push.previousOnOffState !== undefined && model._push.previousOnOffState.when !== change.when){
-                        body += " after " + moment.duration(change.when - model._push.previousOnOffState.when).humanize();
+                        line += " after " + moment.duration(change.when - model._push.previousOnOffState.when).humanize();
                         if(change.after === this.mfc.STATE.Offline){
-                            body += " on"
+                            line += " on"
                         }else{
-                            body += " off"
+                            line += " off"
                         }
                     }
                     model._push.previousOnOffState = change;
-                    body += ".\n";
+                    line += ".\n";
                     break;
                 case "rank":
                     title = "PM: " + model.nm;
                     var brank = change.before === 0 ? " from rank over 250" : (change.before === undefined ? "" : " from rank " + change.before);
                     var arank = change.after === 0 ? "over 250" : String(change.after);
-                    body += "Has moved" + brank + " to rank " + arank + ".\n";
+                    line += "Has moved" + brank + " to rank " + arank + ".\n";
                     break;
                 case "topic":
-                    body += "Has changed her topic:\n\t" + change.after + "\n";
+                    line += "Has changed her topic:\n\t" + change.after + "\n";
                     break;
                 default:
                     this.assert(false, "Don't know how to push for property: " + change.prop);
             }
+            body = "[" + change.when.format("HH:mm:ss") + "] " + line + body;
         }
 
         this.push(title, body);
@@ -194,14 +208,6 @@ class PushMFC{
     private modelStatePusher(model: TaggedModel, before: FCVIDEO, after: FCVIDEO) {
         if(before!==after){
             var change: SingleChange;
-            if(model._push.events[Events.VideoStates] === true || model._push.events[Events.All] === true){
-                change = {prop: "vs", before: before, after: after, when: moment()};
-                if(model._push.previousVideoState === undefined){
-                    model._push.previousVideoState = change;
-                }
-                model._push.changes.push(change);
-                model._push.pushFunc();
-            }
             if(model._push.events[Events.OnOff] === true ||  model._push.events[Events.All] === true){
                 if(before === this.mfc.FCVIDEO.OFFLINE && after !== this.mfc.FCVIDEO.OFFLINE){
                     change = {prop: "vs2", before: before, after: after, when: moment()};
@@ -219,6 +225,14 @@ class PushMFC{
                     model._push.changes.push(change);
                     model._push.pushFunc();
                 }
+            }
+            if(model._push.events[Events.VideoStates] === true || model._push.events[Events.All] === true){
+                change = {prop: "vs", before: before, after: after, when: moment()};
+                if(model._push.previousVideoState === undefined){
+                    model._push.previousVideoState = change;
+                }
+                model._push.changes.push(change);
+                model._push.pushFunc();
             }
         }
     }
