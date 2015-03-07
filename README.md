@@ -15,12 +15,15 @@ To find your Pushbullet API key, log into [Pushbullet.com](http://www.pushbullet
 var pm = require('PushMFC');
 
 var options = {
-    targetDevice: 'Chrome', //This is optional, leave it off to target all devices
-    models: {
+    'All Devices': {    //These events will be pushed to all devices
         3111899: [pm.Events.All], //AspenRae
-        6158368: [pm.Events.OnOff], //GinnyPotter
         //Add as many models as you'd like here
-    }
+    },
+    'Phone': { //These events will be pushes to the device named Phone
+        3111899: [pm.Events.OnOff], //AspenRae
+        6158368: [pm.Events.OnOff], //GinnyPotter
+    },
+    //Add as many device names as you want here
 };
 
 var pmi = new pm.PushMFC('<Your Pushbullet API Key here>', options);
@@ -42,8 +45,7 @@ enum Events {
 }
 
 interface Options{
-    targetDevice?: string; //Which Pushbullet device to target, unspecified == all devices
-    models: {
+    [index: string]: { //Which Pushbullet device name to use for these options
         [index: number]: Events[]; //Which events to monitor for which models
     };
 };

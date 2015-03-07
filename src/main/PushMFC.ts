@@ -37,11 +37,12 @@ enum Events {
     VideoStates, //Track all offline, online, private, public, group, etc states for the model
     Rank, //Changes in the model's rank
     Topic, //Changes in the model's topic
+    CountdownStart, //@TODO - Unimplemented yet
+    CountdownComplete, //@TODO - Unimplemented yet
 }
 
 interface Options{
-    targetDevice?: string; //Which Pushbullet device to target, unspecified == all devices
-    models: {
+    [index: string]: { //Which device to use for this set of models
         [index: number]: Events[]; //Which events to monitor for which models
     };
 };
@@ -57,7 +58,7 @@ interface TaggedModel extends ExpandedModel{
     _push: {
         pushFunc: ()=>void;
         events: {
-            [index: number]: boolean;
+            [index: number]: string; //event -> targetDeviceIden (or "All Devices" for all)
         }
         changes: SingleChange[];
         previousVideoState?: SingleChange;
@@ -79,30 +80,24 @@ class PushMFC{
 
     options: Options;
     pbApiKey: string;
-    deviceIden: string;
+    deviceMap: {[index:string]: string} = {};
 
     constructor(pbApiKey: string, options: Options){
         this.assert.notStrictEqual(pbApiKey, undefined, "Pushbullet API Key is required");
         this.pbApiKey = pbApiKey;
         this.options = options;
-        this.processOptions();
         this.client = new this.mfc.Client();
         this.pusher = new this.pushbullet(this.pbApiKey);
     }
 
     start(callback: ()=>void){
         this.pusher.devices(function(error:any, response:any){
-            if(this.options.targetDevice !== undefined && Array.isArray(response.devices)){
-                for(var i = 0; i<response.devices.length; i++){
-                    if(this.options.targetDevice === response.devices[i].nickname){
-                        this.deviceIden = response.devices[i].iden;
-                        break;
-                    }
-                }
-                if(this.deviceIden === undefined){
-                    throw new Error("Could not find a Pushbullet device named '" + this.options.targetDevice + "'");
-                }
+            this.assert(response!==undefined && Array.isArray(response.devices) && response.devices.length > 0, "Pushbullet sent the device list in an unexpected format")
+            for(var i = 0; i<response.devices.length; i++){
+                this.deviceMap[response.devices[i].nickname] = response.devices[i].iden;
+                this.assert.notStrictEqual("All Devices", response.devices[i].nickname, "You have a Pushbullet device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue")
             }
+            this.processOptions();
             this.push("PM: Startup", "PushMFC has started");
             this.client.connect(true,callback);
         }.bind(this));
@@ -127,10 +122,18 @@ class PushMFC{
         var body = "";
         var line = "";
 
+        //The set of all devices targetted by events in this push
+        var targetDevices: {[index: string]: boolean} = {};
+
         while((change = model._push.changes.shift()) !== undefined){
             line = "";
             switch(change.prop){
                 case "vs":
+                    //Record the target device for this change
+                    this.assert.notStrictEqual(model._push.events[Events.VideoStates], undefined);
+                    targetDevices[model._push.events[Events.VideoStates]] = true;
+
+                    //Build the string for this change
                     line += "Is now in state " + this.mfc.STATE[<number>change.after];
                     if(model._push.previousVideoState !== undefined && model._push.previousVideoState.when !== change.when){
                         line += " after " + moment.duration(change.when - model._push.previousVideoState.when).humanize() + " in state " + this.mfc.STATE[<number>model._push.previousVideoState.after];
@@ -139,6 +142,11 @@ class PushMFC{
                     line += ".\n";
                     break;
                 case "vs2": //Property doesn't really exist on Model, we're overloading the mechanism here to capture Online/Offline....
+                    //Record the target device for this change
+                    this.assert.notStrictEqual(model._push.events[Events.OnOff], undefined);
+                    targetDevices[model._push.events[Events.OnOff]] = true;
+
+                    //Build the string for this change
                     if(change.after === this.mfc.STATE.Offline){
                         line += "Is now off MFC";
                     }else{
@@ -156,12 +164,22 @@ class PushMFC{
                     line += ".\n";
                     break;
                 case "rank":
+                    //Record the target device for this change
+                    this.assert.notStrictEqual(model._push.events[Events.Rank], undefined);
+                    targetDevices[model._push.events[Events.Rank]] = true;
+
+                    //Build the string for this change
                     title = "PM: " + model.nm;
                     var brank = change.before === 0 ? " from rank over 250" : (change.before === undefined ? "" : " from rank " + change.before);
                     var arank = change.after === 0 ? "over 250" : String(change.after);
                     line += "Has moved" + brank + " to rank " + arank + ".\n";
                     break;
                 case "topic":
+                    //Record the target device for this change
+                    this.assert.notStrictEqual(model._push.events[Events.Topic], undefined);
+                    targetDevices[model._push.events[Events.Topic]] = true;
+
+                    //Build the string for this change
                     line += "Has changed her topic:\n\t" + change.after + "\n";
                     break;
                 default:
@@ -170,31 +188,58 @@ class PushMFC{
             body = "[" + change.when.format("HH:mm:ss") + "] " + line + body;
         }
 
-        this.push(title, body);
+        /*
+        Finally make the actual Pushbullet push.
+
+        Possible cases:
+            1. All events in this note have the same device target, easy, just send to that device
+            2. Events in this note have different targets, but at least one of the events has an "All Devices" target, just send to all devices
+            3. Events in this note have different targets, but none have the "All Devices" target, best option here is to send two notes
+        */
+        if(targetDevices["All Devices"] === true){
+            this.push(undefined, title, body);
+        }else{
+            for(var device in targetDevices){
+                if(targetDevices.hasOwnProperty(device)){
+                    this.push(device, title, body);
+                }
+            }
+        }
     }
 
-    private push(title: string, message: string, callback?: ()=>void){
+    private push(deviceIden: string, title: string, message: string, callback?: ()=>void){
         //@TODO - obey the mute/unmute/snooze values
-        this.pusher.note(this.deviceIden, title, message, callback);
+        this.pusher.note(deviceIden, title, message, callback);
     }
 
     private processOptions() {
         this.assert.notStrictEqual(this.options, undefined, "No options specified");
-        this.assert.notStrictEqual(this.options.models, undefined, "No models specified to push");
-        for(var k in this.options.models){
-            if(this.options.models.hasOwnProperty(k)){
-                this.assert(Array.isArray(this.options.models[k]), "Options for model '" + k + "' were not specified as an array");
-                this.assert.notStrictEqual(this.options.models[k].length, 0, "Options for model '" + k + "' were empty");
+        for(var device in this.options){
+            this.assert(device === "All Devices" || this.deviceMap[device] !== undefined, "Unknown Pushbullet device in options: " + device);
+            if(this.options.hasOwnProperty(device)){
+                for(var modelId in this.options[device]){
+                    this.assert(Array.isArray(this.options[device][modelId]), "Options for model '" + modelId + "' were not specified as an array");
+                    this.assert.notStrictEqual(this.options[device][modelId].length, 0, "Options for model '" + modelId + "' were empty");
 
-                var model = <TaggedModel>this.mfc.Model.getModel(k);
-                model.on("vs", this.modelStatePusher.bind(this)); //@TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
-                model.on("rank", this.modelRankPusher.bind(this))
-                model.on("topic", this.modelTopicPusher.bind(this));
-                model._push = {events: {}, changes: [], pushFunc: _.debounce(this.pushStack.bind(this,model), 5000)};
-                this.options.models[k].forEach(function(item: Events){
-                    this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + k);
-                    model._push.events[item] = true;
-                }.bind(this));
+                    var model = <TaggedModel>this.mfc.Model.getModel(modelId);
+                    model.on("vs", this.modelStatePusher.bind(this)); //@TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
+                    model.on("rank", this.modelRankPusher.bind(this))
+                    model.on("topic", this.modelTopicPusher.bind(this));
+                    model._push = {events: {}, changes: [], pushFunc: _.debounce(this.pushStack.bind(this,model), 5000)};
+                    this.options[device][modelId].forEach(function(deviceIden: string, item: Events){
+                        this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + modelId);
+                        if(item === Events.All){
+                            model._push.events[Events.OnOff] = deviceIden;
+                            model._push.events[Events.VideoStates] = deviceIden;
+                            model._push.events[Events.Rank] = deviceIden;
+                            model._push.events[Events.Topic] = deviceIden;
+                            model._push.events[Events.CountdownStart] = deviceIden;
+                            model._push.events[Events.CountdownComplete] = deviceIden;
+                        }else{
+                            model._push.events[item] = deviceIden;
+                        }
+                    }.bind(this, device === "All Devices" ? "All Devices" : this.deviceMap[device]));
+                }
             }
         }
     }
@@ -202,7 +247,7 @@ class PushMFC{
     private modelStatePusher(model: TaggedModel, before: FCVIDEO, after: FCVIDEO) {
         if(before!==after){
             var change: SingleChange;
-            if(model._push.events[Events.OnOff] === true ||  model._push.events[Events.All] === true){
+            if(model._push.events[Events.OnOff] !== undefined ||  model._push.events[Events.All] !== undefined){
                 if(before === this.mfc.FCVIDEO.OFFLINE && after !== this.mfc.FCVIDEO.OFFLINE){
                     change = {prop: "vs2", before: before, after: after, when: moment()};
                     if(model._push.previousOnOffState === undefined){
@@ -220,7 +265,7 @@ class PushMFC{
                     model._push.pushFunc();
                 }
             }
-            if(model._push.events[Events.VideoStates] === true || model._push.events[Events.All] === true){
+            if(model._push.events[Events.VideoStates] !== undefined || model._push.events[Events.All] !== undefined){
                 change = {prop: "vs", before: before, after: after, when: moment()};
                 if(model._push.previousVideoState === undefined){
                     model._push.previousVideoState = change;
@@ -232,14 +277,14 @@ class PushMFC{
     }
 
     private modelRankPusher(model: TaggedModel, before: number, after: number) {
-        if((model._push.events[Events.Rank] === true || model._push.events[Events.All] === true) && before !== after && (before !== undefined || after !== 0)){
+        if((model._push.events[Events.Rank] !== undefined || model._push.events[Events.All] !== undefined) && before !== after && (before !== undefined || after !== 0)){
             model._push.changes.push({prop: "rank", before: before, after: after, when: moment()});
             model._push.pushFunc();
         }
     }
 
     private modelTopicPusher(model: TaggedModel, before: string, after: string) {
-        if((model._push.events[Events.Topic] === true || model._push.events[Events.All] === true) && before !== after && after !== undefined && after !== null && after !== ""){
+        if((model._push.events[Events.Topic] !== undefined || model._push.events[Events.All] !== undefined) && before !== after && after !== undefined && after !== null && after !== ""){
             model._push.changes.push({prop: "topic", before: before, after: after, when: moment()});
             model._push.pushFunc();
         }

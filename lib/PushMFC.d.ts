@@ -6,10 +6,11 @@ declare enum Events {
     VideoStates = 2,
     Rank = 3,
     Topic = 4,
+    CountdownStart = 5,
+    CountdownComplete = 6,
 }
 interface Options {
-    targetDevice?: string;
-    models: {
+    [index: string]: {
         [index: number]: Events[];
     };
 }
@@ -23,7 +24,7 @@ interface TaggedModel extends ExpandedModel {
     _push: {
         pushFunc: () => void;
         events: {
-            [index: number]: boolean;
+            [index: number]: string;
         };
         changes: SingleChange[];
         previousVideoState?: SingleChange;
@@ -40,14 +41,16 @@ declare class PushMFC {
     pusher: any;
     options: Options;
     pbApiKey: string;
-    deviceIden: string;
+    deviceMap: {
+        [index: string]: string;
+    };
     constructor(pbApiKey: string, options: Options);
     start(callback: () => void): void;
     mute(): void;
     unmute(): void;
     snooze(duration: any): void;
     private pushStack(model);
-    private push(title, message, callback?);
+    private push(deviceIden, title, message, callback?);
     private processOptions();
     private modelStatePusher(model, before, after);
     private modelRankPusher(model, before, after);
