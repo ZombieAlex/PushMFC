@@ -1,6 +1,6 @@
 {
   "name": "PushMFC",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Pushbullet notifications for MyFreeCams",
   "main": "index.js",
   "scripts": {

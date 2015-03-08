@@ -274,20 +274,22 @@ class PushMFC{
                     this.assert.notStrictEqual(this.options[device][modelId].length, 0, "Options for model '" + modelId + "' were empty");
 
                     var model = <TaggedModel>this.mfc.Model.getModel(modelId);
-                    model.on("vs", this.modelStatePusher.bind(this)); //@TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
-                    model.on("rank", this.modelRankPusher.bind(this))
-                    model.on("topic", this.modelTopicPusher.bind(this));
-                    model._push = model._push || {
-                        events: {},
-                        changes: [],
-                        pushFunc: _.debounce(this.pushStack.bind(this,model), 5000),
-                        countdown: {
-                            index: -1,
-                            exists: false,
-                            numbers: [],
-                            decrementMap: []
-                        }
-                    };
+                    if(model._push === undefined){
+                        model.on("vs", this.modelStatePusher.bind(this)); //@TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
+                        model.on("rank", this.modelRankPusher.bind(this))
+                        model.on("topic", this.modelTopicPusher.bind(this));
+                        model._push = {
+                            events: {},
+                            changes: [],
+                            pushFunc: _.debounce(this.pushStack.bind(this,model), 5000),
+                            countdown: {
+                                index: -1,
+                                exists: false,
+                                numbers: [],
+                                decrementMap: []
+                            }
+                        };
+                    }
                     this.options[device][modelId].forEach(function(deviceIden: string, item: Events){
                         this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + modelId);
                         if(item === Events.All){
