@@ -110,6 +110,7 @@ class PushMFC{
 
     client: Client;
     pusher: any;
+    debug: boolean = false;
 
     options: Options;
     pbApiKey: string;
@@ -130,6 +131,7 @@ class PushMFC{
                 this.deviceMap[response.devices[i].nickname] = response.devices[i].iden;
                 this.assert.notStrictEqual("All Devices", response.devices[i].nickname, "You have a Pushbullet device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue")
             }
+            this.logDebug("Pushbullet sent these devices:\n", response);
             this.processOptions();
             this.push(undefined, "PM: Startup", "PushMFC has started");
             this.client.connect(true,callback);
@@ -149,6 +151,8 @@ class PushMFC{
     }
 
     private pushStack(model: TaggedModel){
+        this.logDebug("Pushing stack for model '" + model.nm + "'\n", model._push);
+
         var change: SingleChange;
 
         var title = "PM: " + model.nm;
@@ -256,6 +260,7 @@ class PushMFC{
 
     private push(deviceIden: string, title: string, message: string, callback?: ()=>void){
         //@TODO - obey the mute/unmute/snooze values
+        this.logDebug("Pushing:\n", {deviceIden: deviceIden, title: title, message: message});
         this.pusher.note(deviceIden, title, message, callback);
     }
 
@@ -272,7 +277,7 @@ class PushMFC{
                     model.on("vs", this.modelStatePusher.bind(this)); //@TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
                     model.on("rank", this.modelRankPusher.bind(this))
                     model.on("topic", this.modelTopicPusher.bind(this));
-                    model._push = {
+                    model._push = model._push || {
                         events: {},
                         changes: [],
                         pushFunc: _.debounce(this.pushStack.bind(this,model), 5000),
@@ -451,6 +456,16 @@ class PushMFC{
             index: -1,
             decrementMap: newNumbers.map(function(){return 0;})
         };
+    }
+
+    private logDebug(msg: string, obj?: any){
+        if(this.debug === true){
+            if(obj){
+                msg = msg + JSON.stringify(obj, null, '  ');
+            }
+            this.mfc.log(msg);
+            this.mfc.log("-----------------------------------");
+        }
     }
 };
 

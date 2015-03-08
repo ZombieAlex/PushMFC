@@ -46,6 +46,7 @@ declare class PushMFC {
     assert: any;
     client: Client;
     pusher: any;
+    debug: boolean;
     options: Options;
     pbApiKey: string;
     deviceMap: {
@@ -64,4 +65,5 @@ declare class PushMFC {
     private modelTopicPusher(model, before, after);
     private countdownPusher(model, before, after);
     private resetCountdown(model, newNumbers);
+    private logDebug(msg, obj?);
 }
