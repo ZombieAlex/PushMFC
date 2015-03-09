@@ -388,11 +388,11 @@ class PushMFC{
                             if(model._push.countdown.index !== i){
                                 //We had previously been tracking .index as our
                                 //countdown field.  But another index has passed
-                                //our decrement threshold first.  Our assumptions
-                                //were invalid.  Just reset and start over without
-                                //assuming any countdown has been set or reached.
-                                //@TODO - Should we send a message on countdown
-                                //abandonment?
+                                //our decrement threshold too.  Our assumptions
+                                //were possibly invalid.  Just reset and start
+                                //over without assuming any countdown has been
+                                //set or reached.
+                                this.logDebug("Abandoning countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                 this.resetCountdown(model, newNumbers);
                                 return;
                             }else{
@@ -407,6 +407,7 @@ class PushMFC{
                                         });
                                         model._push.pushFunc();
                                     }
+                                    this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                     this.resetCountdown(model, newNumbers);
                                     return;
                                 }
@@ -424,6 +425,7 @@ class PushMFC{
                                 });
                                 model._push.pushFunc();
                             }
+                            this.logDebug("Starting countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                         }
                     }
                 }
@@ -447,6 +449,9 @@ class PushMFC{
 
             //Whether a topic was reached or not, our assumptions are still
             //invalid and we need to reset the countdown state for this model
+            if(model._push.countdown.exists){
+                this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+            }
             this.resetCountdown(model, newNumbers);
         }
     }

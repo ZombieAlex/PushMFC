@@ -19,7 +19,7 @@ var options = {
         3111899: [pm.Events.All], //AspenRae
         //Add as many models as you'd like here
     },
-    'Phone': { //These events will be pushes to the device named Phone
+    'Phone': { //These events will be pushed to the device named Phone
         3111899: [pm.Events.OnOff], //AspenRae
         6158368: [pm.Events.OnOff], //GinnyPotter
     },
