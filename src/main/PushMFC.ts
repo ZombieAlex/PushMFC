@@ -56,7 +56,7 @@ interface SingleChange{
     when: any; //Time of the change, a date or moment...
 }
 
-interface TaggedModel extends ExpandedModel{
+interface TaggedModel extends Model{
     _push: {
         //A bound a debounced function that will send the Pushbullet
         //note notification for all current changes for this model
@@ -151,11 +151,11 @@ class PushMFC{
     }
 
     private pushStack(model: TaggedModel){
-        this.logDebug("Pushing stack for model '" + model.nm + "'\n", model._push);
+        this.logDebug(`Pushing stack for model '${model.bestSession.nm}'\n`, model._push);
 
         var change: SingleChange;
 
-        var title = "PM: " + model.nm;
+        var title = `PM: ${model.bestSession.nm}`;
         var body = "";
         var line = "";
 
@@ -206,10 +206,9 @@ class PushMFC{
                     targetDevices[model._push.events[Events.Rank]] = true;
 
                     //Build the string for this change
-                    title = "PM: " + model.nm;
                     var brank = change.before === 0 ? " from rank over 250" : (change.before === undefined ? "" : " from rank " + change.before);
                     var arank = change.after === 0 ? "over 250" : String(change.after);
-                    line += "Has moved" + brank + " to rank " + arank + ".\n";
+                    line += `Has moved${brank} to rank ${arank}.\n`;
                     break;
                 case "topic":
                     //Record the target device for this change
@@ -217,7 +216,7 @@ class PushMFC{
                     targetDevices[model._push.events[Events.Topic]] = true;
 
                     //Build the string for this change
-                    line += "Has changed her topic:\n\t" + change.after + "\n";
+                    line += `Has changed her topic:\n\t${change.after}\n`;
                     break;
                 case "cdstart":
                     //Record the target device for this change
@@ -234,7 +233,7 @@ class PushMFC{
                     line += change.message + "\n";
                     break;
                 default:
-                    this.assert(false, "Don't know how to push for property: " + change.prop);
+                    this.assert(false, `Don't know how to push for property: ${change.prop}`);
             }
             body = "[" + change.when.format("HH:mm:ss") + "] " + line + body;
         }
@@ -392,7 +391,7 @@ class PushMFC{
                                 //were possibly invalid.  Just reset and start
                                 //over without assuming any countdown has been
                                 //set or reached.
-                                this.logDebug("Abandoning countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                                this.logDebug("Abandoning countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                 this.resetCountdown(model, newNumbers);
                                 return;
                             }else{
@@ -407,7 +406,7 @@ class PushMFC{
                                         });
                                         model._push.pushFunc();
                                     }
-                                    this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                                    this.logDebug("Completing countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                     this.resetCountdown(model, newNumbers);
                                     return;
                                 }
@@ -425,7 +424,7 @@ class PushMFC{
                                 });
                                 model._push.pushFunc();
                             }
-                            this.logDebug("Starting countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                            this.logDebug("Starting countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                         }
                     }
                 }
@@ -450,7 +449,7 @@ class PushMFC{
             //Whether a topic was reached or not, our assumptions are still
             //invalid and we need to reset the countdown state for this model
             if(model._push.countdown.exists){
-                this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                this.logDebug("Completing countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
             }
             this.resetCountdown(model, newNumbers);
         }

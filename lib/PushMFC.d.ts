@@ -21,7 +21,7 @@ interface SingleChange {
     message?: string;
     when: any;
 }
-interface TaggedModel extends ExpandedModel {
+interface TaggedModel extends Model {
     _push: {
         pushFunc: () => void;
         events: {
