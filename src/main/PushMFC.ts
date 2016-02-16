@@ -151,11 +151,11 @@ class PushMFC{
     }
 
     private pushStack(model: TaggedModel){
-        this.logDebug(`Pushing stack for model '${model.bestSession.nm}'\n`, model._push);
+        this.logDebug(`Pushing stack for model '${model.nm}'\n`, model._push);
 
         var change: SingleChange;
 
-        var title = `PM: ${model.bestSession.nm}`;
+        var title = `PM: ${model.nm}`;
         var body = "";
         var line = "";
 
@@ -391,7 +391,7 @@ class PushMFC{
                                 //were possibly invalid.  Just reset and start
                                 //over without assuming any countdown has been
                                 //set or reached.
-                                this.logDebug("Abandoning countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                                this.logDebug("Abandoning countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                 this.resetCountdown(model, newNumbers);
                                 return;
                             }else{
@@ -406,7 +406,7 @@ class PushMFC{
                                         });
                                         model._push.pushFunc();
                                     }
-                                    this.logDebug("Completing countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                                    this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                     this.resetCountdown(model, newNumbers);
                                     return;
                                 }
@@ -424,7 +424,7 @@ class PushMFC{
                                 });
                                 model._push.pushFunc();
                             }
-                            this.logDebug("Starting countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                            this.logDebug("Starting countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                         }
                     }
                 }
@@ -449,7 +449,7 @@ class PushMFC{
             //Whether a topic was reached or not, our assumptions are still
             //invalid and we need to reset the countdown state for this model
             if(model._push.countdown.exists){
-                this.logDebug("Completing countdown for " + model.bestSession.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
             }
             this.resetCountdown(model, newNumbers);
         }
