@@ -41,26 +41,26 @@ enum Events {
     CountdownComplete, //Notify when we detect a countdown has complete
 }
 
-interface Options{
+interface Options {
     [index: string]: { //Which device to use for this set of models
         [index: number]: Events[]; //Which events to monitor for which models
     };
 };
 
-interface SingleChange{
+interface SingleChange {
     prop: string;
     //Single change should either have a before and after, or a message
-    before?: number|string;
-    after?: number|string;
+    before?: number | string;
+    after?: number | string;
     message?: string;
     when: any; //Time of the change, a date or moment...
 }
 
-interface TaggedModel extends Model{
+interface TaggedModel extends Model {
     _push: {
         //A bound a debounced function that will send the Pushbullet
         //note notification for all current changes for this model
-        pushFunc: ()=>void;
+        pushFunc: () => void;
         events: {
             //event -> targetDeviceIden (or "All Devices" for all)
             //Controls which events are sent to which Pushbullet device
@@ -102,55 +102,66 @@ interface TaggedModel extends Model{
 var _ = require('lodash');
 var moment = require('moment');
 
-class PushMFC{
+class PushMFC {
     //@TODO - Just give in and move all these requires to the global scope....it makes the code cleaner, assert() rather than this.assert() etc...
     mfc = require("MFCAuto");
     pushbullet: any = require('pushbullet');
     assert: any = require('assert');
 
     client: Client;
+    selfStarting: boolean;
     pusher: any;
     debug: boolean = false;
 
     options: Options;
     pbApiKey: string;
-    deviceMap: {[index:string]: string} = {};
+    deviceMap: { [index: string]: string } = {};
 
-    constructor(pbApiKey: string, options: Options){
+    constructor(pbApiKey: string, options: Options, client?: Client) {
         this.assert.notStrictEqual(pbApiKey, undefined, "Pushbullet API Key is required");
         this.pbApiKey = pbApiKey;
         this.options = options;
-        this.client = new this.mfc.Client();
+        if (client === undefined) {
+            this.client = new this.mfc.Client();
+            this.selfStarting = true;
+        } else {
+            this.client = client;
+            this.selfStarting = false; //If we were given an existing client, assume our caller will handle connecting it
+        }
         this.pusher = new this.pushbullet(this.pbApiKey);
     }
 
-    start(callback: ()=>void){
-        this.pusher.devices(function(error:any, response:any){
-            this.assert(response!==undefined && Array.isArray(response.devices) && response.devices.length > 0, "Pushbullet sent the device list in an unexpected format")
-            for(var i = 0; i<response.devices.length; i++){
+    start(callback: () => void) {
+        this.pusher.devices((error: any, response: any) => {
+            this.assert(response !== undefined && Array.isArray(response.devices) && response.devices.length > 0, "Pushbullet sent the device list in an unexpected format")
+            for (var i = 0; i < response.devices.length; i++) {
                 this.deviceMap[response.devices[i].nickname] = response.devices[i].iden;
                 this.assert.notStrictEqual("All Devices", response.devices[i].nickname, "You have a Pushbullet device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue")
             }
             this.logDebug("Pushbullet sent these devices:\n", response);
             this.processOptions();
             this.push(undefined, "PM: Startup", "PushMFC has started");
-            this.client.connect(true,callback);
-        }.bind(this));
+            if (this.selfStarting) {
+                this.client.connect(true, callback);
+            } else {
+                callback();
+            }
+        });
     }
 
-    mute(){
+    mute() {
         //@TODO
     }
 
-    unmute(){
+    unmute() {
         //@TODO
     }
 
-    snooze(duration:any /*@TODO*/){
+    snooze(duration: any /*@TODO*/) {
         //@TODO
     }
 
-    private pushStack(model: TaggedModel){
+    private pushStack(model: TaggedModel) {
         this.logDebug(`Pushing stack for model '${model.nm}'\n`, model._push);
 
         var change: SingleChange;
@@ -160,11 +171,11 @@ class PushMFC{
         var line = "";
 
         //The set of all devices targetted by events in this push
-        var targetDevices: {[index: string]: boolean} = {};
+        var targetDevices: { [index: string]: boolean } = {};
 
-        while((change = model._push.changes.shift()) !== undefined){
+        while ((change = model._push.changes.shift()) !== undefined) {
             line = "";
-            switch(change.prop){
+            switch (change.prop) {
                 case "vs":
                     //Record the target device for this change
                     this.assert.notStrictEqual(model._push.events[Events.VideoStates], undefined);
@@ -172,7 +183,7 @@ class PushMFC{
 
                     //Build the string for this change
                     line += "Is now in state " + this.mfc.STATE[<number>change.after];
-                    if(model._push.previousVideoState !== undefined && model._push.previousVideoState.when !== change.when){
+                    if (model._push.previousVideoState !== undefined && model._push.previousVideoState.when !== change.when) {
                         line += " after " + moment.duration(change.when - model._push.previousVideoState.when).humanize() + " in state " + this.mfc.STATE[<number>model._push.previousVideoState.after];
                     }
                     model._push.previousVideoState = change;
@@ -184,16 +195,16 @@ class PushMFC{
                     targetDevices[model._push.events[Events.OnOff]] = true;
 
                     //Build the string for this change
-                    if(change.after === this.mfc.STATE.Offline){
+                    if (change.after === this.mfc.STATE.Offline) {
                         line += "Is now off MFC";
-                    }else{
+                    } else {
                         line += "Is now on MFC";
                     }
-                    if(model._push.previousOnOffState !== undefined && model._push.previousOnOffState.when !== change.when){
+                    if (model._push.previousOnOffState !== undefined && model._push.previousOnOffState.when !== change.when) {
                         line += " after " + moment.duration(change.when - model._push.previousOnOffState.when).humanize();
-                        if(change.after === this.mfc.STATE.Offline){
+                        if (change.after === this.mfc.STATE.Offline) {
                             line += " on"
-                        }else{
+                        } else {
                             line += " off"
                         }
                     }
@@ -246,41 +257,41 @@ class PushMFC{
             2. Events in this note have different targets, but at least one of the events has an "All Devices" target, just send to all devices
             3. Events in this note have different targets, but none have the "All Devices" target, best option here is to send two notes
         */
-        if(targetDevices["All Devices"] === true){
+        if (targetDevices["All Devices"] === true) {
             this.push(undefined, title, body);
-        }else{
-            for(var device in targetDevices){
-                if(targetDevices.hasOwnProperty(device)){
+        } else {
+            for (var device in targetDevices) {
+                if (targetDevices.hasOwnProperty(device)) {
                     this.push(device, title, body);
                 }
             }
         }
     }
 
-    private push(deviceIden: string, title: string, message: string, callback?: ()=>void){
+    private push(deviceIden: string, title: string, message: string, callback?: () => void) {
         //@TODO - obey the mute/unmute/snooze values
-        this.logDebug("Pushing:\n", {deviceIden: deviceIden, title: title, message: message});
+        this.logDebug("Pushing:\n", { deviceIden: deviceIden, title: title, message: message });
         this.pusher.note(deviceIden, title, message, callback);
     }
 
     private processOptions() {
         this.assert.notStrictEqual(this.options, undefined, "No options specified");
-        for(var device in this.options){
+        for (var device in this.options) {
             this.assert(device === "All Devices" || this.deviceMap[device] !== undefined, "Unknown Pushbullet device in options: " + device);
-            if(this.options.hasOwnProperty(device)){
-                for(var modelId in this.options[device]){
+            if (this.options.hasOwnProperty(device)) {
+                for (var modelId in this.options[device]) {
                     this.assert(Array.isArray(this.options[device][modelId]), "Options for model '" + modelId + "' were not specified as an array");
                     this.assert.notStrictEqual(this.options[device][modelId].length, 0, "Options for model '" + modelId + "' were empty");
 
                     var model = <TaggedModel>this.mfc.Model.getModel(modelId);
-                    if(model._push === undefined){
+                    if (model._push === undefined) {
                         model.on("vs", this.modelStatePusher.bind(this)); //@TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
                         model.on("rank", this.modelRankPusher.bind(this))
                         model.on("topic", this.modelTopicPusher.bind(this));
                         model._push = {
                             events: {},
                             changes: [],
-                            pushFunc: _.debounce(this.pushStack.bind(this,model), 5000),
+                            pushFunc: _.debounce(this.pushStack.bind(this, model), 5000),
                             countdown: {
                                 index: -1,
                                 exists: false,
@@ -289,16 +300,16 @@ class PushMFC{
                             }
                         };
                     }
-                    this.options[device][modelId].forEach(function(deviceIden: string, item: Events){
+                    this.options[device][modelId].forEach(function(deviceIden: string, item: Events) {
                         this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + modelId);
-                        if(item === Events.All){
+                        if (item === Events.All) {
                             model._push.events[Events.OnOff] = deviceIden;
                             model._push.events[Events.VideoStates] = deviceIden;
                             model._push.events[Events.Rank] = deviceIden;
                             model._push.events[Events.Topic] = deviceIden;
                             model._push.events[Events.CountdownStart] = deviceIden;
                             model._push.events[Events.CountdownComplete] = deviceIden;
-                        }else{
+                        } else {
                             model._push.events[item] = deviceIden;
                         }
                     }.bind(this, device === "All Devices" ? "All Devices" : this.deviceMap[device]));
@@ -308,29 +319,29 @@ class PushMFC{
     }
 
     private modelStatePusher(model: TaggedModel, before: FCVIDEO, after: FCVIDEO) {
-        if(before!==after){
+        if (before !== after) {
             var change: SingleChange;
-            if(model._push.events[Events.OnOff] !== undefined){
-                if(before === this.mfc.FCVIDEO.OFFLINE && after !== this.mfc.FCVIDEO.OFFLINE){
-                    change = {prop: "vs2", before: before, after: after, when: moment()};
-                    if(model._push.previousOnOffState === undefined){
+            if (model._push.events[Events.OnOff] !== undefined) {
+                if (before === this.mfc.FCVIDEO.OFFLINE && after !== this.mfc.FCVIDEO.OFFLINE) {
+                    change = { prop: "vs2", before: before, after: after, when: moment() };
+                    if (model._push.previousOnOffState === undefined) {
                         model._push.previousOnOffState = change;
                     }
                     model._push.changes.push(change);
                     model._push.pushFunc();
                 }
-                if(after === this.mfc.FCVIDEO.OFFLINE && before !== this.mfc.FCVIDEO.OFFLINE){
-                    change = {prop: "vs2", before: before, after: after, when: moment()};
-                    if(model._push.previousOnOffState === undefined){
+                if (after === this.mfc.FCVIDEO.OFFLINE && before !== this.mfc.FCVIDEO.OFFLINE) {
+                    change = { prop: "vs2", before: before, after: after, when: moment() };
+                    if (model._push.previousOnOffState === undefined) {
                         model._push.previousOnOffState = change;
                     }
                     model._push.changes.push(change);
                     model._push.pushFunc();
                 }
             }
-            if(model._push.events[Events.VideoStates] !== undefined){
-                change = {prop: "vs", before: before, after: after, when: moment()};
-                if(model._push.previousVideoState === undefined){
+            if (model._push.events[Events.VideoStates] !== undefined) {
+                change = { prop: "vs", before: before, after: after, when: moment() };
+                if (model._push.previousVideoState === undefined) {
                     model._push.previousVideoState = change;
                 }
                 model._push.changes.push(change);
@@ -340,24 +351,24 @@ class PushMFC{
     }
 
     private modelRankPusher(model: TaggedModel, before: number, after: number) {
-        if(model._push.events[Events.Rank] !== undefined && before !== after && (before !== undefined || after !== 0)){
-            model._push.changes.push({prop: "rank", before: before, after: after, when: moment()});
+        if (model._push.events[Events.Rank] !== undefined && before !== after && (before !== undefined || after !== 0)) {
+            model._push.changes.push({ prop: "rank", before: before, after: after, when: moment() });
             model._push.pushFunc();
         }
     }
 
     private modelTopicPusher(model: TaggedModel, before: string, after: string) {
-        if(model._push.events[Events.Topic] !== undefined && before !== after && after !== undefined && after !== null && after !== ""){
-            model._push.changes.push({prop: "topic", before: before, after: after, when: moment()});
+        if (model._push.events[Events.Topic] !== undefined && before !== after && after !== undefined && after !== null && after !== "") {
+            model._push.changes.push({ prop: "topic", before: before, after: after, when: moment() });
             model._push.pushFunc();
         }
 
-        if(after !== before && (model._push.events[Events.CountdownStart] !== undefined || model._push.events[Events.CountdownComplete] !== undefined)){
+        if (after !== before && (model._push.events[Events.CountdownStart] !== undefined || model._push.events[Events.CountdownComplete] !== undefined)) {
             this.countdownPusher(model, before, after);
         }
     }
 
-    private countdownPusher(model: TaggedModel, before: string, after: string){
+    private countdownPusher(model: TaggedModel, before: string, after: string) {
         var numberRe = /([0-9]+)/g;
 
         //If any single number in a model's topic decrements at least
@@ -366,65 +377,65 @@ class PushMFC{
 
         //MFC's auto-countdown frequently puts the string "[none]"
         //in the topic for a completed auto-countdown
-        var cleanAfter = after.replace(/\[none\]/g,"0");
+        var cleanAfter = after.replace(/\[none\]/g, "0");
 
         //Pull out any numbers in the new topic
         var newNumbers = (cleanAfter.match(numberRe) || []).map(Number);
         var oldNumbers = model._push.countdown.numbers;
 
         //If we've already been tracking numbers in this model's topic
-        if(newNumbers.length === oldNumbers.length && newNumbers.length > 0){
+        if (newNumbers.length === oldNumbers.length && newNumbers.length > 0) {
             //Compare the new numbers to the old
-            for(var i=0; i<newNumbers.length; i++){
+            for (var i = 0; i < newNumbers.length; i++) {
                 //For any numbers that have decreased
-                if(oldNumbers[i] > newNumbers[i]){
+                if (oldNumbers[i] > newNumbers[i]) {
                     //Record that they've decreased once
                     model._push.countdown.decrementMap[i]++;
 
                     //If the number at this position has decreased enough
-                    if(model._push.countdown.decrementMap[i] >= minimumDecrements){
-                        if(model._push.countdown.exists){
-                            if(model._push.countdown.index !== i){
+                    if (model._push.countdown.decrementMap[i] >= minimumDecrements) {
+                        if (model._push.countdown.exists) {
+                            if (model._push.countdown.index !== i) {
                                 //We had previously been tracking .index as our
                                 //countdown field.  But another index has passed
                                 //our decrement threshold too.  Our assumptions
                                 //were possibly invalid.  Just reset and start
                                 //over without assuming any countdown has been
                                 //set or reached.
-                                this.logDebug("Abandoning countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                                this.logDebug("Abandoning countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                 this.resetCountdown(model, newNumbers);
                                 return;
-                            }else{
+                            } else {
                                 //We already think we have a countdown at this
                                 //index.  Is the new value 0?
-                                if(newNumbers[i] === 0){
-                                    if(model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined){
+                                if (newNumbers[i] === 0) {
+                                    if (model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined) {
                                         model._push.changes.push({
-                                            prop:"cdend",
+                                            prop: "cdend",
                                             message: "Countdown completed! Topic is now:\n\t" + after + "\nAnd was:\n\t" + before,
                                             when: moment()
                                         });
                                         model._push.pushFunc();
                                     }
-                                    this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                                    this.logDebug("Completing countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                                     this.resetCountdown(model, newNumbers);
                                     return;
                                 }
                             }
-                        }else{
+                        } else {
                             //Number "i" has decremented enough that we
                             //think we're looking at a countdown now.
                             model._push.countdown.exists = true;
                             model._push.countdown.index = i;
-                            if(model._push.events[Events.CountdownStart] !== undefined){
+                            if (model._push.events[Events.CountdownStart] !== undefined) {
                                 model._push.changes.push({
-                                    prop:"cdstart",
+                                    prop: "cdstart",
                                     message: "Countdown detected, " + newNumbers[i] + " remaining:\n\t" + after,
                                     when: moment()
                                 });
                                 model._push.pushFunc();
                             }
-                            this.logDebug("Starting countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+                            this.logDebug("Starting countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
                         }
                     }
                 }
@@ -432,14 +443,14 @@ class PushMFC{
 
             //Set the current numbers for the next topic update to compare against
             model._push.countdown.numbers = newNumbers;
-        }else{
+        } else {
             //Topic has radically changed and doesn't have the same amount
             //of distinct numbers as it used to.  That might be because a
             //countdown has been reached and the model wrote a completely new
             //topic.
-            if(model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined){
+            if (model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined) {
                 model._push.changes.push({
-                    prop:"cdend",
+                    prop: "cdend",
                     message: "Countdown completed! Topic is now:\n\t" + after + "\nAnd was:\n\t" + before,
                     when: moment()
                 });
@@ -448,25 +459,25 @@ class PushMFC{
 
             //Whether a topic was reached or not, our assumptions are still
             //invalid and we need to reset the countdown state for this model
-            if(model._push.countdown.exists){
-                this.logDebug("Completing countdown for " + model.nm +". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
+            if (model._push.countdown.exists) {
+                this.logDebug("Completing countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
             }
             this.resetCountdown(model, newNumbers);
         }
     }
 
-    private resetCountdown(model: TaggedModel, newNumbers: number[]){
+    private resetCountdown(model: TaggedModel, newNumbers: number[]) {
         model._push.countdown = {
             exists: false,
             numbers: newNumbers,
             index: -1,
-            decrementMap: newNumbers.map(function(){return 0;})
+            decrementMap: newNumbers.map(function() { return 0; })
         };
     }
 
-    private logDebug(msg: string, obj?: any){
-        if(this.debug === true){
-            if(obj){
+    private logDebug(msg: string, obj?: any) {
+        if (this.debug === true) {
+            if (obj) {
                 msg = msg + JSON.stringify(obj, null, '  ');
             }
             this.mfc.log(msg);

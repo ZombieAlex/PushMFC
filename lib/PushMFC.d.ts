@@ -45,6 +45,7 @@ declare class PushMFC {
     pushbullet: any;
     assert: any;
     client: Client;
+    selfStarting: boolean;
     pusher: any;
     debug: boolean;
     options: Options;
@@ -52,7 +53,7 @@ declare class PushMFC {
     deviceMap: {
         [index: string]: string;
     };
-    constructor(pbApiKey: string, options: Options);
+    constructor(pbApiKey: string, options: Options, client?: Client);
     start(callback: () => void): void;
     mute(): void;
     unmute(): void;
