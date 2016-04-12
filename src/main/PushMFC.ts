@@ -1,5 +1,3 @@
-/// <reference path="../dependent_definitions/node.d.ts" />
-/// <reference path="../../node_modules/MFCAuto/lib/MFCAuto.d.ts" />
 /*
 PushMFC.js - Pushbullet notifications for MyFreeCams
 
@@ -142,7 +140,7 @@ class PushMFC {
             this.processOptions();
             this.push(undefined, "PM: Startup", "PushMFC has started");
             if (this.selfStarting) {
-                this.client.connect(true, callback);
+                this.client.connect(true).then(callback);
             } else {
                 callback();
             }

@@ -1,5 +1,3 @@
-
-
 declare enum Events {
     All = 0,
     OnOff = 1,
