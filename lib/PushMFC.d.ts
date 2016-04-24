@@ -39,18 +39,16 @@ interface TaggedModel extends Model {
 declare var _: any;
 declare var moment: any;
 declare class PushMFC {
-    mfc: any;
-    pushbullet: any;
-    assert: any;
-    client: Client;
-    selfStarting: boolean;
-    pusher: any;
-    debug: boolean;
-    options: Options;
-    pbApiKey: string;
-    deviceMap: {
-        [index: string]: string;
-    };
+    private mfc;
+    private pushbullet;
+    private assert;
+    private client;
+    private selfStarting;
+    private pusher;
+    private debug;
+    private options;
+    private pbApiKey;
+    private deviceMap;
     constructor(pbApiKey: string, options: Options, client?: Client);
     start(callback: () => void): void;
     mute(): void;
