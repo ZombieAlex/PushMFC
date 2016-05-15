@@ -1,11 +1,16 @@
 #PushMFC.js
 
-A Node.js module to send [Pushbullet](http://www.pushbullet.com) notifications for [MyFreeCams](http://www.myfreecams.com).
+A Node.js module to send [Join by joaoapps](http://joaoapps.com/join/) notifications for [MyFreeCams](http://www.myfreecams.com).  A previous version of
+this module worked with [Pushbullet](http://www.pushbullet.com).  That version is now archived and unmaintained in the [pushbullet branch](https://github.com/ZombieAlex/PushMFC/tree/pushbullet).
+It probably still works, but no guarantees.
 
 PushMFC is a work in progress.  It probably has some bugs.  It definitely has some design quirks.  But it mostly works.
 
-To find your Pushbullet API key, log into [Pushbullet.com](http://www.pushbullet.com) and go to your "Account Settings" by clicking on your picture in the upper right.  Your key will be listed under "Access Token".  This key is never sent back to me, but merely given to the the [Pushbullet NPM](https://www.npmjs.com/package/pushbullet) to enable pushing to your devices.
-
+To find your Join API key:
+1. Log into [the Join API page](https://joinjoaomgcd.appspot.com/). And while you're here, take note of all your device names. Those names are what we will use in the PushMFC config
+2. Select one of your devices (it doesn't matter which device)
+3. Click the "JOIN API" button
+4. Click "SHOW" next to "API Key"
 
 ------------
 
@@ -28,7 +33,7 @@ var options = {
     //under multiple devices
 };
 
-var pmi = new pm.PushMFC('<Your Pushbullet API Key here>', options);
+var pmi = new pm.PushMFC('<Your Join API Key here>', options);
 pmi.start();
 ```
 

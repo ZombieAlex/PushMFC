@@ -1,47 +1,22 @@
 /*
-PushMFC.js - Pushbullet notifications for MyFreeCams
-
-@TODO List
-    * Pre-query all the given models to get around the long standing bug
-        where MFC doesn't send any information for models that are online
-        but "idle" and not in any other video state like away free chat etc
-        at the moment you log in.  They do send that detail for friends, but
-        nobody else.  I think this is queryable through an FCTYPE.DETAILS
-        message.
-    * Support logging for all friends of a given account
-    * Support specifying models my name:
-        [index: string]: Events[]; // Models can be specified by name
-    * Support dynamic filters like:
-        dynamic: {
-            [index: string]: {
-                when: (model, before, after) => boolean;
-                push: Events[];
-            }
-        }
-
-        Where it would look like:
-
-        dynamic: {
-            rank: {
-                when: (model, before, after) => after !== 0;
-                push: [pm.Events.All]
-            }
-        }
+PushMFC.js - 'Join by joaoapps' notifications for MyFreeCams
 */
+const https = require("https");
+const countdown = require("./Countdown.js").default;
 
 enum Events {
-    All, // Log every possible event
-    OnOff, // Track only whether the model is generally on MFC or not (leaving off public/private/group details)
-    VideoStates, // Track all offline, online, private, public, group, etc states for the model
-    Rank, // Changes in the model's rank
-    Topic, // Changes in the model's topic
-    CountdownStart, // Notify when we detect a countdown has started
-    CountdownComplete, // Notify when we detect a countdown has complete
+    All,                // Log every possible event
+    OnOff,              // Track only whether the model is generally on MFC or not (leaving off public/private/group details)
+    VideoStates,        // Track all offline, online, private, public, group, etc states for the model
+    Rank,               // Changes in the model's rank
+    Topic,              // Changes in the model's topic
+    CountdownStart,     // Notify when we detect a countdown has started
+    CountdownComplete,  // Notify when we detect a countdown has complete
 }
 
 interface Options {
-    [index: string]: { // Which device to use for this set of models
-        [index: number]: Events[]; // Which events to monitor for which models
+    [index: string]: {              // Which device to use for this set of models
+        [index: number]: Events[];  // Which events to monitor for which models
     };
 };
 
@@ -56,12 +31,12 @@ interface SingleChange {
 
 interface TaggedModel extends Model {
     _push: {
-        // A bound a debounced function that will send the Pushbullet
+        // A bound a debounced function that will send the Join
         // note notification for all current changes for this model
         pushFunc: () => void;
         events: {
-            // event -> targetDeviceIden (or "All Devices" for all)
-            // Controls which events are sent to which Pushbullet device
+            // event -> deviceId (or "All Devices" for all)
+            // Controls which events are sent to which Join device
             // There is one and only one device allowed, last one specified wins
             [index: number]: string;
         }
@@ -73,27 +48,6 @@ interface TaggedModel extends Model {
         // states
         previousVideoState?: SingleChange;
         previousOnOffState?: SingleChange;
-
-        // Where we'll stash our countdown tracker code
-        countdown: {
-            // True when this model appears to have a countdown in progress
-            // otherwise false
-            exists: boolean;
-
-            // All the numbers in the models last topic parsed out, in order
-            // as numbers (not strings)
-            numbers: number[];
-
-            // Which of the numbers in this.numbers we currently believe is
-            // the countdown tracking value, or -1 if we don't know yet
-            index: number;
-
-            // How many times each of the numbers in this.numbers
-            // have been decremented.  We use this to attempt to identify
-            // both if the model has a countdown (if decrement count > limit)
-            // and which index we currently think is the current countdown value
-            decrementMap: number[];
-        }
     };
 }
 
@@ -103,22 +57,23 @@ var moment = require("moment");
 class PushMFC {
     // @TODO - Just give in and move all these requires to the global scope....it makes the code cleaner, assert() rather than this.assert() etc...
     private mfc = require("MFCAuto");
-    private pushbullet: any = require("pushbullet");
     private assert: any = require("assert");
 
     private client: Client;
     private selfStarting: boolean;
-    private pusher: any;
     private debug: boolean = false;
+    private countdown: any;
+    private trackedModels: Set<number>;
 
     private options: Options;
-    private pbApiKey: string;
+    private joinApiKey: string;
     private deviceMap: { [index: string]: string } = {};
 
-    constructor(pbApiKey: string, options: Options, client?: Client) {
-        this.assert.notStrictEqual(pbApiKey, undefined, "Pushbullet API Key is required");
-        this.pbApiKey = pbApiKey;
+    constructor(joinApiKey: string, options: Options, client?: Client) {
+        this.assert.notStrictEqual(joinApiKey, undefined, "Join API Key is required");
+        this.joinApiKey = joinApiKey;
         this.options = options;
+        this.trackedModels = new Set() as Set<number>;
         if (client === undefined) {
             this.client = new this.mfc.Client();
             this.selfStarting = true;
@@ -126,19 +81,49 @@ class PushMFC {
             this.client = client;
             this.selfStarting = false; // If we were given an existing client, assume our caller will handle connecting it
         }
-        this.pusher = new this.pushbullet(this.pbApiKey);
+        this.client.setMaxListeners(500);
+        this.countdown = new countdown();
+        this.countdown.on("countdownCompleted", (model: TaggedModel, before: string, after: string) => {
+            if(model._push !== undefined && model._push.events[Events.CountdownComplete] !== undefined){
+                model._push.changes.push({
+                    prop: "cdend",
+                    message: "Countdown completed! New topic: " + after + "\nOld topic: " + before,
+                    when: moment(),
+                });
+                model._push.pushFunc();
+            }
+        });
+        this.countdown.on("countdownDetected", (model: TaggedModel, remaining: string, topic: string) => {
+            if(model._push !== undefined && model._push.events[Events.CountdownStart] !== undefined){
+                model._push.changes.push({
+                    prop: "cdstart",
+                    message: "Countdown detected, " + remaining + " remaining:\n" + topic,
+                    when: moment(),
+                });
+                model._push.pushFunc();
+            }
+        });
+        this.client.on("CLIENT_CONNECTED", () => {
+            // On connect, explicitly query each user we're tracking.
+            // This resolves an issue where MFC does not send information
+            // about a model who is online but not on camera when you first
+            // load the model list.  That model must be either in your friend
+            // list or specifically queried for (like this) to know she's
+            // online.
+            this.trackedModels.forEach((id) => {
+                this.client.queryUser(id);
+            });
+        });
     }
 
     public start(callback: () => void) {
-        this.pusher.devices((error: any, response: any) => {
-            this.assert(response !== undefined && Array.isArray(response.devices) && response.devices.length > 0, "Pushbullet sent the device list in an unexpected format");
-            for (let i = 0; i < response.devices.length; i++) {
-                this.deviceMap[response.devices[i].nickname] = response.devices[i].iden;
-                this.assert.notStrictEqual("All Devices", response.devices[i].nickname, "You have a Pushbullet device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue");
+        this.getDevices().then((devices: any[]) => {
+            for (let i = 0; i < devices.length; i++) {
+                this.deviceMap[devices[i].deviceName] = devices[i].deviceId;
+                this.assert.notStrictEqual("All Devices", devices[i].deviceName, "You have a Join device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue");
             }
-            this.logDebug("Pushbullet sent these devices:\n", response);
+            this.logDebug("Join sent these devices:\n", devices);
             this.processOptions();
-            this.push(undefined, "PM: Startup", "PushMFC has started");
             if (this.selfStarting) {
                 this.client.connect(true).then(callback);
             } else {
@@ -147,16 +132,40 @@ class PushMFC {
         });
     }
 
-    public mute() {
-        // @TODO
+    private getDevices() {
+        return new Promise((resolve, reject) => {
+            https.get(  `https://joinjoaomgcd.appspot.com/_ah/api/registration/v1/listDevices?apikey=${this.joinApiKey}`,
+                        (res) => {
+                            let contents = "";
+                            res.on("data", function (chunk: string) {
+                                contents += chunk;
+                            });
+                            res.on("end", () => {
+                                let obj = JSON.parse(contents);
+                                this.assert(Array.isArray(obj.records) && obj.records.length > 0, "Join sent the device list in an unexpected format");
+                                resolve(obj.records);
+                            });
+                        }
+                    ).on("error", (e) => {
+                        reject(e);
+                    }
+            );
+        });
     }
 
-    public unmute() {
-        // @TODO
+    private getThumbnailForModel(m: Model) {
+        let id = m.uid.toString();
+        return `http://img.mfcimg.com/photos2/${id.slice(0, 3)}/${id}/avatar.90x90.jpg`;
     }
 
-    public snooze(duration: any /*@TODO*/) {
-        // @TODO
+    private note(targets: string[], model: Model, title: string, message: string) {
+        if (targets == undefined){
+            // Send to all devices
+            https.get(`https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?apikey=${this.joinApiKey}&deviceId=group.all&text=${encodeURIComponent(message)}&title=${encodeURIComponent(title)}&icon=${encodeURIComponent(this.getThumbnailForModel(model))}`);
+        }else{
+            // Send to the specified device subset
+            https.get(`https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?text=${encodeURIComponent(message)}&title=${encodeURIComponent(title)}&icon=${encodeURIComponent(this.getThumbnailForModel(model))}&deviceId=${encodeURIComponent(targets.join(','))}`);
+        }
     }
 
     private pushStack(model: TaggedModel) {
@@ -225,7 +234,7 @@ class PushMFC {
                     targetDevices[model._push.events[Events.Topic]] = true;
 
                     // Build the string for this change
-                    line += `Has changed her topic:\n\t${change.after}\n`;
+                    line += `New topic: ${change.after}\n`;
                     break;
                 case "cdstart":
                     // Record the target device for this change
@@ -248,7 +257,7 @@ class PushMFC {
         }
 
         /*
-        Finally make the actual Pushbullet push.
+        Finally make the actual Join push.
 
         Possible cases:
             1. All events in this note have the same device target, easy, just send to that device
@@ -256,20 +265,16 @@ class PushMFC {
             3. Events in this note have different targets, but none have the "All Devices" target, best option here is to send two notes
         */
         if (targetDevices["All Devices"] === true) {
-            this.push(undefined, title, body);
+            this.note(undefined, model, title, body);
         } else {
+            let deviceList = [];
             for (let device in targetDevices) {
                 if (targetDevices.hasOwnProperty(device)) {
-                    this.push(device, title, body);
+                    deviceList.push(device);
                 }
             }
+            this.note(deviceList, model, title, body);
         }
-    }
-
-    private push(deviceIden: string, title: string, message: string, callback?: () => void) {
-        // @TODO - obey the mute/unmute/snooze values
-        this.logDebug("Pushing:\n", { deviceIden: deviceIden, title: title, message: message });
-        this.pusher.note(deviceIden, title, message, callback);
     }
 
     private processOptions() {
@@ -281,8 +286,10 @@ class PushMFC {
                     if (this.options[device].hasOwnProperty(modelId)) {
                         this.assert(Array.isArray(this.options[device][modelId]), "Options for model '" + modelId + "' were not specified as an array");
                         this.assert.notStrictEqual(this.options[device][modelId].length, 0, "Options for model '" + modelId + "' were empty");
+                        let modelIdInt = parseInt(modelId);
+                        this.trackedModels.add(modelIdInt);
 
-                        let model = this.mfc.Model.getModel(modelId) as TaggedModel;
+                        let model = this.mfc.Model.getModel(modelIdInt) as TaggedModel;
                         if (model._push === undefined) {
                             model.on("vs", this.modelStatePusher.bind(this)); // @TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
                             model.on("rank", this.modelRankPusher.bind(this));
@@ -291,12 +298,6 @@ class PushMFC {
                                 events: {},
                                 changes: [],
                                 pushFunc: _.debounce(this.pushStack.bind(this, model), 5000),
-                                countdown: {
-                                    index: -1,
-                                    exists: false,
-                                    numbers: [],
-                                    decrementMap: [],
-                                },
                             };
                         }
                         this.options[device][modelId].forEach(function (deviceIden: string, item: Events) {
@@ -362,117 +363,6 @@ class PushMFC {
             model._push.changes.push({ prop: "topic", before: before, after: after, when: moment() });
             model._push.pushFunc();
         }
-
-        if (after !== before && (model._push.events[Events.CountdownStart] !== undefined || model._push.events[Events.CountdownComplete] !== undefined)) {
-            this.countdownPusher(model, before, after);
-        }
-    }
-
-    private countdownPusher(model: TaggedModel, before: string, after: string) {
-        let numberRe = /([0-9]+)/g;
-
-        // If any single number in a model's topic decrements at least
-        // this many times, we'll assume that it's a countdown goal
-        let minimumDecrements = 2;
-
-        // MFC's auto-countdown frequently puts the string "[none]"
-        // in the topic for a completed auto-countdown
-        let cleanAfter = after.replace(/\[none\]/g, "0");
-
-        // Pull out any numbers in the new topic
-        let newNumbers = (cleanAfter.match(numberRe) || []).map(Number);
-        let oldNumbers = model._push.countdown.numbers;
-
-        // If we've already been tracking numbers in this model's topic
-        if (newNumbers.length === oldNumbers.length && newNumbers.length > 0) {
-            // Compare the new numbers to the old
-            for (let i = 0; i < newNumbers.length; i++) {
-                // For any numbers that have decreased
-                if (oldNumbers[i] > newNumbers[i]) {
-                    // Record that they've decreased once
-                    model._push.countdown.decrementMap[i]++;
-
-                    // If the number at this position has decreased enough
-                    if (model._push.countdown.decrementMap[i] >= minimumDecrements) {
-                        if (model._push.countdown.exists) {
-                            if (model._push.countdown.index !== i) {
-                                // We had previously been tracking .index as our
-                                // countdown field.  But another index has passed
-                                // our decrement threshold too.  Our assumptions
-                                // were possibly invalid.  Just reset and start
-                                // over without assuming any countdown has been
-                                // set or reached.
-                                this.logDebug("Abandoning countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
-                                this.resetCountdown(model, newNumbers);
-                                return;
-                            } else {
-                                // We already think we have a countdown at this
-                                // index.  Is the new value 0?
-                                if (newNumbers[i] === 0) {
-                                    if (model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined) {
-                                        model._push.changes.push({
-                                            prop: "cdend",
-                                            message: "Countdown completed! Topic is now:\n\t" + after + "\nAnd was:\n\t" + before,
-                                            when: moment(),
-                                        });
-                                        model._push.pushFunc();
-                                    }
-                                    this.logDebug("Completing countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
-                                    this.resetCountdown(model, newNumbers);
-                                    return;
-                                }
-                            }
-                        } else {
-                            // Number "i" has decremented enough that we
-                            // think we're looking at a countdown now.
-                            model._push.countdown.exists = true;
-                            model._push.countdown.index = i;
-                            if (model._push.events[Events.CountdownStart] !== undefined) {
-                                model._push.changes.push({
-                                    prop: "cdstart",
-                                    message: "Countdown detected, " + newNumbers[i] + " remaining:\n\t" + after,
-                                    when: moment(),
-                                });
-                                model._push.pushFunc();
-                            }
-                            this.logDebug("Starting countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
-                        }
-                    }
-                }
-            }
-
-            // Set the current numbers for the next topic update to compare against
-            model._push.countdown.numbers = newNumbers;
-        } else {
-            // Topic has radically changed and doesn't have the same amount
-            // of distinct numbers as it used to.  That might be because a
-            // countdown has been reached and the model wrote a completely new
-            // topic.
-            if (model._push.countdown.exists && model._push.events[Events.CountdownComplete] !== undefined) {
-                model._push.changes.push({
-                    prop: "cdend",
-                    message: "Countdown completed! Topic is now:\n\t" + after + "\nAnd was:\n\t" + before,
-                    when: moment(),
-                });
-                model._push.pushFunc();
-            }
-
-            // Whether a topic was reached or not, our assumptions are still
-            // invalid and we need to reset the countdown state for this model
-            if (model._push.countdown.exists) {
-                this.logDebug("Completing countdown for " + model.nm + ". New topic:\n\t" + after + "\nOld topic:\n\t" + before, model._push.countdown);
-            }
-            this.resetCountdown(model, newNumbers);
-        }
-    }
-
-    private resetCountdown(model: TaggedModel, newNumbers: number[]) {
-        model._push.countdown = {
-            exists: false,
-            numbers: newNumbers,
-            index: -1,
-            decrementMap: newNumbers.map(function () { return 0; }),
-        };
     }
 
     private logDebug(msg: string, obj?: any) {

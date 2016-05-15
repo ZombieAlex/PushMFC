@@ -1,3 +1,5 @@
+declare const https: any;
+declare const countdown: any;
 declare enum Events {
     All = 0,
     OnOff = 1,
@@ -28,39 +30,30 @@ interface TaggedModel extends Model {
         changes: SingleChange[];
         previousVideoState?: SingleChange;
         previousOnOffState?: SingleChange;
-        countdown: {
-            exists: boolean;
-            numbers: number[];
-            index: number;
-            decrementMap: number[];
-        };
     };
 }
 declare var _: any;
 declare var moment: any;
 declare class PushMFC {
     private mfc;
-    private pushbullet;
     private assert;
     private client;
     private selfStarting;
-    private pusher;
     private debug;
+    private countdown;
+    private trackedModels;
     private options;
-    private pbApiKey;
+    private joinApiKey;
     private deviceMap;
-    constructor(pbApiKey: string, options: Options, client?: Client);
+    constructor(joinApiKey: string, options: Options, client?: Client);
     start(callback: () => void): void;
-    mute(): void;
-    unmute(): void;
-    snooze(duration: any): void;
+    private getDevices();
+    private getThumbnailForModel(m);
+    private note(targets, model, title, message);
     private pushStack(model);
-    private push(deviceIden, title, message, callback?);
     private processOptions();
     private modelStatePusher(model, before, after);
     private modelRankPusher(model, before, after);
     private modelTopicPusher(model, before, after);
-    private countdownPusher(model, before, after);
-    private resetCountdown(model, newNumbers);
     private logDebug(msg, obj?);
 }
