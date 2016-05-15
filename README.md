@@ -55,7 +55,7 @@ enum Events {
 }
 
 interface Options{
-    [index: string]: { //Which Pushbullet device name to use for these options
+    [index: string]: { //Which device name to use for these options
         [index: number]: Events[]; //Which events to monitor for which models
     };
 };
