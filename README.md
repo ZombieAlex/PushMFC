@@ -7,6 +7,7 @@ It probably still works, but no guarantees.
 PushMFC is a work in progress.  It probably has some bugs.  It definitely has some design quirks.  But it mostly works.
 
 To find your Join API key:
+
 1. Log into [the Join API page](https://joinjoaomgcd.appspot.com/). And while you're here, take note of all your device names. Those names are what we will use in the PushMFC config
 2. Select one of your devices (it doesn't matter which device)
 3. Click the "JOIN API" button
