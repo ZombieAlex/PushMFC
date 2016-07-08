@@ -17,7 +17,7 @@ topic changes.
 
 import {EventEmitter} from "events";
 // import * as assert from "assert";
-var mfc = require("MFCAuto");
+import * as mfc from "MFCAuto";
 // var log = mfc.log;
 
 interface TopicTracker {
@@ -27,19 +27,22 @@ interface TopicTracker {
     index: number;
 }
 
-export default class Countdown implements NodeJS.EventEmitter {
+export class Countdown implements EventEmitter {
     private minimumDecrements = 2;
     private modelToTracker: Map<number, TopicTracker>;
 
     public addListener: (event: string, listener: Function) => this;
     public on: (event: string, listener: Function) => this;
     public once: (event: string, listener: Function) => this;
+    public prependListener: (event: string, listener: Function) => this;
+    public prependOnceListener: (event: string, listener: Function) => this;
     public removeListener: (event: string, listener: Function) => this;
     public removeAllListeners: (event?: string) => this;
     public getMaxListeners: () => number;
     public setMaxListeners: (n: number) => this;
     public listeners: (event: string) => Function[];
     public emit: (event: string, ...args: any[]) => boolean;
+    public eventNames: () => string[];
     public listenerCount: (type: string) => number;
 
     constructor() {
@@ -47,7 +50,7 @@ export default class Countdown implements NodeJS.EventEmitter {
         mfc.Model.on("topic", this.topicHandler.bind(this));
     }
 
-    private topicHandler(model: Model, before: string, after: string): void {
+    private topicHandler(model: mfc.Model, before: string, after: string): void {
         let numberRe = /\d+/g;
         let cleanAfter = after.replace(/\[none\]/g, "0");
 

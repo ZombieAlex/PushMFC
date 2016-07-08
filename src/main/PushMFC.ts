@@ -1,8 +1,12 @@
 /*
 PushMFC.js - 'Join by joaoapps' notifications for MyFreeCams
 */
-const https = require("https");
-const countdown = require("./Countdown.js").default;
+import * as https from "https";
+import {Countdown} from "./Countdown";
+import * as _ from "lodash";
+import * as moment from "moment";
+import * as mfc from "MFCAuto";
+import * as assert from "assert";
 
 enum Events {
     All,                // Log every possible event
@@ -29,7 +33,7 @@ interface SingleChange {
     when: any; // Time of the change, a date or moment...
 }
 
-interface TaggedModel extends Model {
+interface TaggedModel extends mfc.Model {
     _push: {
         // A bound a debounced function that will send the Join
         // note notification for all current changes for this model
@@ -51,38 +55,31 @@ interface TaggedModel extends Model {
     };
 }
 
-var _ = require("lodash");
-var moment = require("moment");
-
 class PushMFC {
-    // @TODO - Just give in and move all these requires to the global scope....it makes the code cleaner, assert() rather than this.assert() etc...
-    private mfc = require("MFCAuto");
-    private assert: any = require("assert");
-
-    private client: Client;
+    private client: mfc.Client;
     private selfStarting: boolean;
     private debug: boolean = false;
-    private countdown: any;
+    private countdown: Countdown;
     private trackedModels: Set<number>;
 
     private options: Options;
     private joinApiKey: string;
     private deviceMap: { [index: string]: string } = {};
 
-    constructor(joinApiKey: string, options: Options, client?: Client) {
-        this.assert.notStrictEqual(joinApiKey, undefined, "Join API Key is required");
+    constructor(joinApiKey: string, options: Options, client?: mfc.Client) {
+        assert.notStrictEqual(joinApiKey, undefined, "Join API Key is required");
         this.joinApiKey = joinApiKey;
         this.options = options;
         this.trackedModels = new Set() as Set<number>;
         if (client === undefined) {
-            this.client = new this.mfc.Client();
+            this.client = new mfc.Client();
             this.selfStarting = true;
         } else {
             this.client = client;
             this.selfStarting = false; // If we were given an existing client, assume our caller will handle connecting it
         }
         this.client.setMaxListeners(500);
-        this.countdown = new countdown();
+        this.countdown = new Countdown();
         this.countdown.on("countdownCompleted", (model: TaggedModel, before: string, after: string) => {
             if(model._push !== undefined && model._push.events[Events.CountdownComplete] !== undefined){
                 model._push.changes.push({
@@ -120,7 +117,7 @@ class PushMFC {
         this.getDevices().then((devices: any[]) => {
             for (let i = 0; i < devices.length; i++) {
                 this.deviceMap[devices[i].deviceName] = devices[i].deviceId;
-                this.assert.notStrictEqual("All Devices", devices[i].deviceName, "You have a Join device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue");
+                assert.notStrictEqual("All Devices", devices[i].deviceName, "You have a Join device named 'All Devices', PushMFC is currently reserving that name for a special case and cannot continue");
             }
             this.logDebug("Join sent these devices:\n", devices);
             this.processOptions();
@@ -142,7 +139,7 @@ class PushMFC {
                             });
                             res.on("end", () => {
                                 let obj = JSON.parse(contents);
-                                this.assert(Array.isArray(obj.records) && obj.records.length > 0, "Join sent the device list in an unexpected format");
+                                assert(Array.isArray(obj.records) && obj.records.length > 0, "Join sent the device list in an unexpected format");
                                 resolve(obj.records);
                             });
                         }
@@ -153,12 +150,12 @@ class PushMFC {
         });
     }
 
-    private getThumbnailForModel(m: Model) {
+    private getThumbnailForModel(m: mfc.Model) {
         let id = m.uid.toString();
         return `http://img.mfcimg.com/photos2/${id.slice(0, 3)}/${id}/avatar.90x90.jpg`;
     }
 
-    private note(targets: string[], model: Model, title: string, message: string) {
+    private note(targets: string[], model: mfc.Model, title: string, message: string) {
         if (targets == undefined){
             // Send to all devices
             https.get(`https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?apikey=${this.joinApiKey}&deviceId=group.all&text=${encodeURIComponent(message)}&title=${encodeURIComponent(title)}&icon=${encodeURIComponent(this.getThumbnailForModel(model))}`);
@@ -185,31 +182,31 @@ class PushMFC {
             switch (change.prop) {
                 case "vs":
                     // Record the target device for this change
-                    this.assert.notStrictEqual(model._push.events[Events.VideoStates], undefined);
+                    assert.notStrictEqual(model._push.events[Events.VideoStates], undefined);
                     targetDevices[model._push.events[Events.VideoStates]] = true;
 
                     // Build the string for this change
-                    line += "Is now in state " + this.mfc.STATE[change.after];
+                    line += "Is now in state " + mfc.STATE[change.after];
                     if (model._push.previousVideoState !== undefined && model._push.previousVideoState.when !== change.when) {
-                        line += " after " + moment.duration(change.when - model._push.previousVideoState.when).humanize() + " in state " + this.mfc.STATE[model._push.previousVideoState.after];
+                        line += " after " + moment.duration(change.when - model._push.previousVideoState.when).humanize() + " in state " + mfc.STATE[model._push.previousVideoState.after];
                     }
                     model._push.previousVideoState = change;
                     line += ".\n";
                     break;
                 case "vs2": // Property doesn't really exist on Model, we're overloading the mechanism here to capture Online/Offline....
                     // Record the target device for this change
-                    this.assert.notStrictEqual(model._push.events[Events.OnOff], undefined);
+                    assert.notStrictEqual(model._push.events[Events.OnOff], undefined);
                     targetDevices[model._push.events[Events.OnOff]] = true;
 
                     // Build the string for this change
-                    if (change.after === this.mfc.STATE.Offline) {
+                    if (change.after === mfc.STATE.Offline) {
                         line += "Is now off MFC";
                     } else {
                         line += "Is now on MFC";
                     }
                     if (model._push.previousOnOffState !== undefined && model._push.previousOnOffState.when !== change.when) {
                         line += " after " + moment.duration(change.when - model._push.previousOnOffState.when).humanize();
-                        if (change.after === this.mfc.STATE.Offline) {
+                        if (change.after === mfc.STATE.Offline) {
                             line += " on";
                         } else {
                             line += " off";
@@ -220,7 +217,7 @@ class PushMFC {
                     break;
                 case "rank":
                     // Record the target device for this change
-                    this.assert.notStrictEqual(model._push.events[Events.Rank], undefined);
+                    assert.notStrictEqual(model._push.events[Events.Rank], undefined);
                     targetDevices[model._push.events[Events.Rank]] = true;
 
                     // Build the string for this change
@@ -230,7 +227,7 @@ class PushMFC {
                     break;
                 case "topic":
                     // Record the target device for this change
-                    this.assert.notStrictEqual(model._push.events[Events.Topic], undefined);
+                    assert.notStrictEqual(model._push.events[Events.Topic], undefined);
                     targetDevices[model._push.events[Events.Topic]] = true;
 
                     // Build the string for this change
@@ -238,20 +235,20 @@ class PushMFC {
                     break;
                 case "cdstart":
                     // Record the target device for this change
-                    this.assert.notStrictEqual(model._push.events[Events.CountdownStart], undefined);
+                    assert.notStrictEqual(model._push.events[Events.CountdownStart], undefined);
                     targetDevices[model._push.events[Events.CountdownStart]] = true;
 
                     line += change.message + "\n";
                     break;
                 case "cdend":
                     // Record the target device for this change
-                    this.assert.notStrictEqual(model._push.events[Events.CountdownComplete], undefined);
+                    assert.notStrictEqual(model._push.events[Events.CountdownComplete], undefined);
                     targetDevices[model._push.events[Events.CountdownComplete]] = true;
 
                     line += change.message + "\n";
                     break;
                 default:
-                    this.assert(false, `Don't know how to push for property: ${change.prop}`);
+                    assert(false, `Don't know how to push for property: ${change.prop}`);
             }
             body = "[" + change.when.format("HH:mm:ss") + "] " + line + body;
         }
@@ -278,18 +275,18 @@ class PushMFC {
     }
 
     private processOptions() {
-        this.assert.notStrictEqual(this.options, undefined, "No options specified");
+        assert.notStrictEqual(this.options, undefined, "No options specified");
         for (let device in this.options) {
             if (this.options.hasOwnProperty(device)) {
-                this.assert(device === "All Devices" || this.deviceMap[device] !== undefined, "Unknown Pushbullet device in options: " + device);
+                assert(device === "All Devices" || this.deviceMap[device] !== undefined, "Unknown Pushbullet device in options: " + device);
                 for (let modelId in this.options[device]) {
                     if (this.options[device].hasOwnProperty(modelId)) {
-                        this.assert(Array.isArray(this.options[device][modelId]), "Options for model '" + modelId + "' were not specified as an array");
-                        this.assert.notStrictEqual(this.options[device][modelId].length, 0, "Options for model '" + modelId + "' were empty");
+                        assert(Array.isArray(this.options[device][modelId]), "Options for model '" + modelId + "' were not specified as an array");
+                        assert.notStrictEqual(this.options[device][modelId].length, 0, "Options for model '" + modelId + "' were empty");
                         let modelIdInt = parseInt(modelId);
                         this.trackedModels.add(modelIdInt);
 
-                        let model = this.mfc.Model.getModel(modelIdInt) as TaggedModel;
+                        let model = mfc.Model.getModel(modelIdInt) as TaggedModel;
                         if (model._push === undefined) {
                             model.on("vs", this.modelStatePusher.bind(this)); // @TODO - This is kind of ugly, we don't need to hook these callbacks if we're not pushing these
                             model.on("rank", this.modelRankPusher.bind(this));
@@ -301,7 +298,7 @@ class PushMFC {
                             };
                         }
                         this.options[device][modelId].forEach(function (deviceIden: string, item: Events) {
-                            this.assert.notStrictEqual(item, undefined, "Unknown option specified on model " + modelId);
+                            assert.notStrictEqual(item, undefined, "Unknown option specified on model " + modelId);
                             if (item === Events.All) {
                                 model._push.events[Events.OnOff] = deviceIden;
                                 model._push.events[Events.VideoStates] = deviceIden;
@@ -319,11 +316,11 @@ class PushMFC {
         }
     }
 
-    private modelStatePusher(model: TaggedModel, before: FCVIDEO, after: FCVIDEO) {
+    private modelStatePusher(model: TaggedModel, before: mfc.FCVIDEO, after: mfc.FCVIDEO) {
         if (before !== after) {
             let change: SingleChange;
             if (model._push.events[Events.OnOff] !== undefined) {
-                if (before === this.mfc.FCVIDEO.OFFLINE && after !== this.mfc.FCVIDEO.OFFLINE) {
+                if (before === mfc.FCVIDEO.OFFLINE && after !== mfc.FCVIDEO.OFFLINE) {
                     change = { prop: "vs2", before: before, after: after, when: moment() };
                     if (model._push.previousOnOffState === undefined) {
                         model._push.previousOnOffState = change;
@@ -331,7 +328,7 @@ class PushMFC {
                     model._push.changes.push(change);
                     model._push.pushFunc();
                 }
-                if (after === this.mfc.FCVIDEO.OFFLINE && before !== this.mfc.FCVIDEO.OFFLINE) {
+                if (after === mfc.FCVIDEO.OFFLINE && before !== mfc.FCVIDEO.OFFLINE) {
                     change = { prop: "vs2", before: before, after: after, when: moment() };
                     if (model._push.previousOnOffState === undefined) {
                         model._push.previousOnOffState = change;
@@ -370,8 +367,8 @@ class PushMFC {
             if (obj) {
                 msg = msg + JSON.stringify(obj, null, "  ");
             }
-            this.mfc.log(msg);
-            this.mfc.log("-----------------------------------");
+            mfc.log(msg);
+            mfc.log("-----------------------------------");
         }
     }
 };

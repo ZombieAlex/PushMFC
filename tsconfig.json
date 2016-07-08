@@ -11,10 +11,8 @@
         "stripInternal": true,
         "removeComments": true
     },
-    "files": [
-      "./typings/tsd.d.ts",
-      "./node_modules/MFCAuto/lib/MFCAuto.d.ts",
-      "./src/main/PushMFC.ts",
-      "./src/main/Countdown.ts"
+    "exclude": [
+        "lib",
+        "node_modules"
     ]
 }
