@@ -1,6 +1,6 @@
 {
   "name": "PushMFC",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Join by joaoapps notifications for MyFreeCams",
   "main": "lib/index.js",
   "typings": "lib/index",
@@ -14,11 +14,13 @@
   "author": "ZombieAlex",
   "license": "MIT",
   "dependencies": {
-    "MFCAuto": "git://github.com/ZombieAlex/MFCAuto",
-    "lodash": "^3.3.1",
-    "moment": "^2.9.0"
+    "MFCAuto": "git://github.com/ZombieAlex/MFCAuto.git",
+    "lodash": "^4.17.4",
+    "moment": "^2.17.1"
   },
   "devDependencies": {
-    "typescript": "^1.8.9"
+    "@types/es6-shim": "^0.31.32",
+    "@types/node": "^7.0.5",
+    "typescript": "^2.1.6"
   }
 }

@@ -8,7 +8,7 @@ import * as moment from "moment";
 import * as mfc from "MFCAuto";
 import * as assert from "assert";
 
-enum Events {
+export enum Events {
     All,                // Log every possible event
     OnOff,              // Track only whether the model is generally on MFC or not (leaving off public/private/group details)
     VideoStates,        // Track all offline, online, private, public, group, etc states for the model
@@ -18,7 +18,7 @@ enum Events {
     CountdownComplete,  // Notify when we detect a countdown has complete
 }
 
-interface Options {
+export interface Options {
     [index: string]: {              // Which device to use for this set of models
         [index: number]: Events[];  // Which events to monitor for which models
     };
@@ -55,7 +55,7 @@ interface TaggedModel extends mfc.Model {
     };
 }
 
-class PushMFC {
+export class PushMFC {
     private client: mfc.Client;
     private selfStarting: boolean;
     private debug: boolean = false;
@@ -221,8 +221,8 @@ class PushMFC {
                     targetDevices[model._push.events[Events.Rank]] = true;
 
                     // Build the string for this change
-                    let brank = change.before === 0 ? " from rank over 250" : (change.before === undefined ? "" : " from rank " + change.before);
-                    let arank = change.after === 0 ? "over 250" : String(change.after);
+                    let brank = change.before === 0 ? " from rank over 1000" : (change.before === undefined ? "" : " from rank " + change.before);
+                    let arank = change.after === 0 ? "over 1000" : String(change.after);
                     line += `Has moved${brank} to rank ${arank}.\n`;
                     break;
                 case "topic":
@@ -372,6 +372,3 @@ class PushMFC {
         }
     }
 };
-
-exports.Events = Events;
-exports.PushMFC = PushMFC;
