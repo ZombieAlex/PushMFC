@@ -1,12 +1,12 @@
 /*
 PushMFC.js - 'Join by joaoapps' notifications for MyFreeCams
 */
-import * as https from "https";
-import {Countdown} from "./Countdown";
+import {Countdown} from "mfcauto-plugins";
 import * as _ from "lodash";
-import * as moment from "moment";
-import * as mfc from "MFCAuto";
 import * as assert from "assert";
+import * as https from "https";
+import * as mfc from "MFCAuto";
+import * as moment from "moment";
 
 export enum Events {
     All,                // Log every possible event
@@ -139,7 +139,7 @@ export class PushMFC {
                             });
                             res.on("end", () => {
                                 let obj = JSON.parse(contents);
-                                assert(Array.isArray(obj.records) && obj.records.length > 0, "Join sent the device list in an unexpected format");
+                                assert(Array.isArray(obj.records) && obj.records.length > 0, `Join sent the device list in an unexpected format: '${contents}'`);
                                 resolve(obj.records);
                             });
                         }
