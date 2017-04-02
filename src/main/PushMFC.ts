@@ -161,7 +161,7 @@ export class PushMFC {
             https.get(`https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?apikey=${this.joinApiKey}&deviceId=group.all&text=${encodeURIComponent(message)}&title=${encodeURIComponent(title)}&icon=${encodeURIComponent(this.getThumbnailForModel(model))}`);
         }else{
             // Send to the specified device subset
-            https.get(`https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?text=${encodeURIComponent(message)}&title=${encodeURIComponent(title)}&icon=${encodeURIComponent(this.getThumbnailForModel(model))}&deviceId=${encodeURIComponent(targets.join(','))}`);
+            https.get(`https://joinjoaomgcd.appspot.com/_ah/api/messaging/v1/sendPush?apikey=${this.joinApiKey}&text=${encodeURIComponent(message)}&title=${encodeURIComponent(title)}&icon=${encodeURIComponent(this.getThumbnailForModel(model))}&deviceId=${encodeURIComponent(targets.join(','))}`);
         }
     }
 
