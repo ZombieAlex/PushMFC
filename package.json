@@ -4,6 +4,9 @@
   "description": "Join by joaoapps notifications for MyFreeCams",
   "main": "lib/index.js",
   "typings": "lib/index",
+  "peerDependencies": {
+    "MFCAuto": "^5.2.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -14,14 +17,12 @@
   "author": "ZombieAlex",
   "license": "MIT",
   "dependencies": {
-    "lodash": "^4.17.4",
-    "MFCAuto": "github:zombiealex/MFCAuto",
-    "mfcauto-plugins": "github:zombiealex/mfcauto-plugins",
-    "moment": "^2.17.1"
+    "lodash": "^4.17.10",
+    "moment": "^2.22.1"
   },
   "devDependencies": {
-    "@types/es6-shim": "^0.31.32",
-    "@types/node": "^7.0.5",
-    "typescript": "^2.2.0"
+    "@types/es6-shim": "^0.31.37",
+    "@types/node": "^10.1.2",
+    "typescript": "^2.8.3"
   }
 }
